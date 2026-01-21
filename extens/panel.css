@@ -1,3 +1,58 @@
+#game-ui {
+  display: flex;
+  gap: 12px;
+  justify-content: center;
+  margin-top: 20px;
+}
+
+/* Style général des boutons */
+#game-ui button {
+  background: linear-gradient(135deg, #9146FF, #772CE8);
+  border: none;
+  padding: 12px 20px;
+  border-radius: 10px;
+  font-size: 16px;
+  font-weight: 600;
+  color: white;
+  cursor: pointer;
+  transition: transform 0.15s ease, box-shadow 0.2s ease, opacity 0.2s ease;
+  box-shadow: 0 4px 12px rgba(0,0,0,0.25);
+  letter-spacing: 0.3px;
+}
+
+/* Désactivé */
+#game-ui button:disabled {
+  opacity: 0.4;
+  cursor: not-allowed;
+  box-shadow: none;
+}
+
+/* Hover */
+#game-ui button:not(:disabled):hover {
+  transform: translateY(-3px);
+  box-shadow: 0 6px 16px rgba(0,0,0,0.35);
+}
+
+/* Click */
+#game-ui button:not(:disabled):active {
+  transform: translateY(0);
+  box-shadow: 0 3px 10px rgba(0,0,0,0.25);
+}
+
+/* Variantes par action (optionnel) */
+#attack {
+  background: linear-gradient(135deg, #ff4d4d, #d93636);
+}
+
+#heal {
+  background: linear-gradient(135deg, #4cd964, #3cbf52);
+}
+
+#bomb {
+  background: linear-gradient(135deg, #ff9f0a, #d98200);
+}
+
+
 .toast {
   position: fixed;
   bottom: 20px;

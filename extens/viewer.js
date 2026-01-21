@@ -41,7 +41,7 @@ function sendAction(action) {
   })
   .then(res => res.json())
   .then(() => {
-    showToast(`✅ ${action} envoyé`);
+    showToast(action);
   })
   .catch(err => console.error('Erreur action:', err));
 }
@@ -72,7 +72,7 @@ function showToast(message = 'Action envoyée ✔') {
       break;
   }
 
-  toast.textContent = message;
+  toast.textContent = messageFr;
   toast.classList.remove('hidden');
 
   setTimeout(() => {
