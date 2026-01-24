@@ -36,10 +36,11 @@ export default class MainScene extends Phaser.Scene {
     /* =========================
        COLLISIONS
     ========================= */
-    obstacle0.setCollisionByProperty({ collides: true }); 
-    obstacle1.setCollisionByProperty({ collides: true }); 
-    obstacle2.setCollisionByProperty({ collides: true }); 
-    obstacle3.setCollisionByProperty({ collides: true });
+    obstacle0.setCollisionFromCollisionGroup();
+    obstacle1.setCollisionFromCollisionGroup();
+    obstacle2.setCollisionFromCollisionGroup();
+    obstacle3.setCollisionFromCollisionGroup();
+
 
     /* =========================
        HERO
