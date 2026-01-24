@@ -22,6 +22,11 @@ const config = {
     default: "arcade",
     arcade: { debug: false }
   },
+  render: {
+    pixelArt: true,
+    antialias: false,
+    roundPixels: true
+  },
   scene: [MainScene]
 };
 
