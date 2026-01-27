@@ -20,6 +20,17 @@ export default class MainScene extends Phaser.Scene {
         `./assets/character/forest_ranger/3/idle/0_Forest_Ranger_Idle_${num}.png`
       );
     }
+
+    /* =========================
+       HERO RUNNING FRAMES
+    ========================= */
+    for (let i = 0; i <= 11; i++) {
+      const num = i.toString().padStart(3, "0");
+      this.load.image(
+        `hero-run-${i}`,
+        `./assets/character/forest_ranger/3/running/0_Forest_Ranger_Running_${num}.png`
+      );
+    }
   }
 
   create() {
@@ -119,10 +130,23 @@ export default class MainScene extends Phaser.Scene {
     this.heroSprite.play("idle");
 
     /* =========================
+       HERO RUNNING ANIMATION
+    ========================= */
+    this.anims.create({
+      key: "run",
+      frames: Array.from({ length: 12 }, (_, i) => ({
+        key: `hero-run-${i}`
+      })),
+      frameRate: 12,
+      repeat: -1
+    });
+
+
+    /* =========================
        CAMERA
     ========================= */
     this.cameras.main.setBounds(0, 0, map.widthInPixels, map.heightInPixels);
-    this.cameras.main.setZoom(2);
+    this.cameras.main.setZoom(3);
     this.cameras.main.startFollow(this.heroSprite, true, 0.15, 0.15);
     this.cameras.main.roundPixels = true;
 
@@ -139,41 +163,69 @@ export default class MainScene extends Phaser.Scene {
   }
 
   update() {
-    const speed = this.speed;
-    let vx = 0;
-    let vy = 0;
+  const speed = this.speed;
+  let vx = 0;
+  let vy = 0;
 
-    if (this.cursors.left.isDown || this.keys.Q.isDown) vx = -speed;
-    else if (this.cursors.right.isDown || this.keys.D.isDown) vx = speed;
+  if (this.cursors.left.isDown || this.keys.Q.isDown) vx = -speed;
+  else if (this.cursors.right.isDown || this.keys.D.isDown) vx = speed;
 
-    if (this.cursors.up.isDown || this.keys.Z.isDown) vy = -speed;
-    else if (this.cursors.down.isDown || this.keys.S.isDown) vy = speed;
+  if (this.cursors.up.isDown || this.keys.Z.isDown) vy = -speed;
+  else if (this.cursors.down.isDown || this.keys.S.isDown) vy = speed;
 
-    const Matter = this.Matter;
-    const body = this.heroBody;
-
-    // Petite fonction utilitaire : tente un déplacement, annule s'il y a collision
-    const tryMove = (dx, dy) => {
-      if (dx === 0 && dy === 0) return;
-
-      Matter.Body.translate(body, { x: dx, y: dy });
-
-      const collisions = Matter.Query.collides(body, this.collisionBodies);
-      if (collisions.length > 0) {
-        // On annule le mouvement si on touche un mur
-        Matter.Body.translate(body, { x: -dx, y: -dy });
-      }
-    };
-
-    // On teste séparément X puis Y pour un glissement propre le long des murs
-    tryMove(vx, 0);
-    tryMove(0, vy);
-
-    // Sync sprite → body
-    this.heroSprite.x = body.position.x;
-    this.heroSprite.y = body.position.y;
-
-    // Depth dynamique
-    this.heroSprite.setDepth(this.heroSprite.y);
+  /* =========================
+   ORIENTATION DU PERSONNAGE
+  ========================= */
+  if (vx > 0) {
+    this.heroSprite.setFlipX(false); // vers la droite
+  } else if (vx < 0) {
+    this.heroSprite.setFlipX(true);  // vers la gauche
   }
+
+
+  /* =========================
+     ANIMATIONS
+  ========================= */
+  if (vx !== 0 || vy !== 0) {
+    if (this.heroSprite.anims.currentAnim?.key !== "run") {
+      this.heroSprite.play("run");
+    }
+  } else {
+    if (this.heroSprite.anims.currentAnim?.key !== "idle") {
+      this.heroSprite.play("idle");
+    }
+  }
+
+  /* =========================
+     COLLISIONS MANUELLES
+  ========================= */
+  const Matter = this.Matter;
+  const body = this.heroBody;
+
+  const tryMove = (dx, dy) => {
+    if (dx === 0 && dy === 0) return;
+
+    Matter.Body.translate(body, { x: dx, y: dy });
+
+    const collisions = Matter.Query.collides(body, this.collisionBodies);
+    if (collisions.length > 0) {
+      Matter.Body.translate(body, { x: -dx, y: -dy });
+    }
+  };
+
+  tryMove(vx, 0);
+  tryMove(0, vy);
+
+  /* =========================
+     SYNC SPRITE → BODY
+  ========================= */
+  this.heroSprite.x = body.position.x;
+  this.heroSprite.y = body.position.y;
+
+  /* =========================
+     DEPTH DYNAMIQUE
+  ========================= */
+  this.heroSprite.setDepth(this.heroSprite.y);
+}
+
 }
