@@ -108,17 +108,19 @@ export default class MainScene extends Phaser.Scene {
 
     this.cameraTarget = new Phaser.Math.Vector2(this.heroSprite.x, this.heroSprite.y);
     this.cameras.main.setBounds(0, 0, map.widthInPixels, map.heightInPixels);
-    this.cameras.main.startFollow(this.cameraTarget, false);
+    this.cameras.main.startFollow(this.cameraTarget, false, 0.1, 0.1);
     this.cameras.main.roundPixels = true;
     this.cameras.main.setZoom(3);
 
     this.cursors = this.input.keyboard.createCursorKeys();
     this.keys = this.input.keyboard.addKeys("Z,Q,S,D");
 
-    this.speed = 0.8;
+    this.speed = 0.3;
   }
 
-  update() {
+  update(time, delta) {
+    const normalizeSpeed = 0.15 * delta;
+
     let vx = 0;
     let vy = 0;
 
@@ -158,21 +160,18 @@ export default class MainScene extends Phaser.Scene {
       }
     };
 
-    tryMove(vx * this.speed, 0);
-    tryMove(0, vy * this.speed);
+    tryMove(vx * normalizeSpeed, 0);
+    tryMove(0, vy * normalizeSpeed);
 
     this.logicPos.x = body.position.x;
     this.logicPos.y = body.position.y;
-
-    const px = Math.round(this.logicPos.x);
-    const py = Math.round(this.logicPos.y);
-
-    this.heroSprite.x = px;
-    this.heroSprite.y = py;
-
-    this.cameraTarget.x = px;
-    this.cameraTarget.y = py;
-
+      
+    this.heroSprite.x = Math.round(this.logicPos.x);
+    this.heroSprite.y = Math.round(this.logicPos.y);
+      
+    this.cameraTarget.x = this.logicPos.x;
+    this.cameraTarget.y = this.logicPos.y;
+      
     this.heroSprite.setDepth(this.heroSprite.y);
   }
 }
