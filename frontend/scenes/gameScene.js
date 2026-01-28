@@ -1,6 +1,10 @@
-export default class MainScene extends Phaser.Scene {
+export default class GameScene extends Phaser.Scene {
   constructor() {
-    super("MainScene");
+    super("GameScene");
+  }
+
+  init(data) {
+    this.rt = data.rt; // RenderTexture fourni par MainScene
   }
 
   preload() {
@@ -25,9 +29,9 @@ export default class MainScene extends Phaser.Scene {
   }
 
   create() {
-    window.gameScene = this;
-
     this.Matter = Phaser.Physics.Matter.Matter;
+
+    /* ================= MAP ================= */
 
     const map = this.make.tilemap({ key: "map" });
     const tileset = map.addTilesetImage("exte", "tiles");
@@ -43,14 +47,11 @@ export default class MainScene extends Phaser.Scene {
     const obstacle3Visual = map.createLayer("Obstacle3_Visual", tileset, 0, 0);
 
     const above = map.createLayer("Above1", tileset, 0, 0);
+    above.setDepth(9999);
 
-    this.aboveContainer = this.add.container(0, 0);
-    this.aboveContainer.add(above);
-    this.aboveContainer.setDepth(9999);
+    obstacle3Visual.setDepth(5000);
 
-    this.obstacle3Container = this.add.container(0, 0);
-    this.obstacle3Container.add(obstacle3Visual);
-    this.obstacle3Container.setDepth(5000);
+    /* ================= COLLISIONS ================= */
 
     obstacle0.setCollisionBetween(1, 10000);
     obstacle1.setCollisionBetween(1, 10000);
@@ -62,6 +63,8 @@ export default class MainScene extends Phaser.Scene {
     this.matter.world.convertTilemapLayer(obstacle2);
     this.matter.world.convertTilemapLayer(obstacle3Collision);
 
+    /* ================= HERO ================= */
+
     this.heroSprite = this.add.sprite(
       map.widthInPixels / 2,
       map.heightInPixels / 2,
@@ -70,71 +73,100 @@ export default class MainScene extends Phaser.Scene {
 
     this.heroSprite.setOrigin(0.5, 0.7);
 
+    // ⚠️ PAS SENSOR → vraie collision physique
     this.heroBody = this.matter.add.circle(
       this.heroSprite.x,
       this.heroSprite.y,
       8,
       {
-        isSensor: true,
-        inertia: Infinity
+        isSensor: false,
+        inertia: Infinity,
+        frictionAir: 0.2
       }
     );
 
-    this.collisionBodies = this.matter.world.localWorld.bodies.filter(
-      (b) => b.isStatic
-    );
-
-    this.logicPos = new Phaser.Math.Vector2(this.heroSprite.x, this.heroSprite.y);
+    /* ================= ANIMS ================= */
 
     this.anims.create({
       key: "idle",
-      frames: Array.from({ length: 18 }, (_, i) => ({
-        key: `hero-idle-${i}`
-      })),
+      frames: Array.from({ length: 18 }, (_, i) => ({ key: `hero-idle-${i}` })),
       frameRate: 8,
+      repeat: -1
+    });
+
+    this.anims.create({
+      key: "run",
+      frames: Array.from({ length: 12 }, (_, i) => ({ key: `hero-run-${i}` })),
+      frameRate: 12,
       repeat: -1
     });
 
     this.heroSprite.play("idle");
 
-    this.anims.create({
-      key: "run",
-      frames: Array.from({ length: 12 }, (_, i) => ({
-        key: `hero-run-${i}`
-      })),
-      frameRate: 12,
-      repeat: -1
-    });
+    /* ================= CAMERA ================= */
 
-    this.cameraTarget = new Phaser.Math.Vector2(this.heroSprite.x, this.heroSprite.y);
     this.cameras.main.setBounds(0, 0, map.widthInPixels, map.heightInPixels);
-    this.cameras.main.startFollow(this.cameraTarget, false);
+
+    this.cameraTarget = new Phaser.Math.Vector2(
+      this.heroSprite.x,
+      this.heroSprite.y
+    );
+
+    this.cameras.main.startFollow(this.cameraTarget, true, 0.15, 0.15);
     this.cameras.main.roundPixels = true;
-    this.cameras.main.setZoom(3);
+
+    /* ================= INPUT ================= */
 
     this.cursors = this.input.keyboard.createCursorKeys();
     this.keys = this.input.keyboard.addKeys("Z,Q,S,D");
 
-    this.speed = 0.8;
+    /* ================= STATS ================= */
+
+    this.speed = 2; 
+    // 2 = lent
+    // 4 = normal
+    // 6 = rapide
+    // 8 = très rapide
   }
 
-  update() {
-    let vx = 0;
-    let vy = 0;
+  update(time, delta) {
 
-    if (this.cursors.left.isDown || this.keys.Q.isDown) vx = -1;
-    else if (this.cursors.right.isDown || this.keys.D.isDown) vx = 1;
+    /* ================= INPUT DIR ================= */
 
-    if (this.cursors.up.isDown || this.keys.Z.isDown) vy = -1;
-    else if (this.cursors.down.isDown || this.keys.S.isDown) vy = 1;
+    let dx = 0;
+    let dy = 0;
 
-    if (vx > 0) {
-      this.heroSprite.setFlipX(false);
-    } else if (vx < 0) {
-      this.heroSprite.setFlipX(true);
+    if (this.cursors.left.isDown || this.keys.Q.isDown) dx = -1;
+    else if (this.cursors.right.isDown || this.keys.D.isDown) dx = 1;
+
+    if (this.cursors.up.isDown || this.keys.Z.isDown) dy = -1;
+    else if (this.cursors.down.isDown || this.keys.S.isDown) dy = 1;
+
+    /* ================= NORMALIZE ================= */
+
+    const len = Math.hypot(dx, dy);
+    if (len > 0) {
+      dx /= len;
+      dy /= len;
     }
 
-    if (vx !== 0 || vy !== 0) {
+    /* ================= PHYSICS ================= */
+
+    this.Matter.Body.setVelocity(this.heroBody, {
+      x: dx * this.speed,
+      y: dy * this.speed
+    });
+
+    /* ================= SYNC SPRITE ================= */
+
+    this.heroSprite.x = this.heroBody.position.x;
+    this.heroSprite.y = this.heroBody.position.y;
+
+    this.heroSprite.setDepth(this.heroSprite.y);
+
+    /* ================= ANIMS ================= */
+
+    if (dx !== 0 || dy !== 0) {
       if (this.heroSprite.anims.currentAnim?.key !== "run") {
         this.heroSprite.play("run");
       }
@@ -144,35 +176,21 @@ export default class MainScene extends Phaser.Scene {
       }
     }
 
-    const Matter = this.Matter;
-    const body = this.heroBody;
+    /* ================= FLIP ================= */
 
-    const tryMove = (dx, dy) => {
-      if (dx === 0 && dy === 0) return;
+    if (dx > 0) this.heroSprite.setFlipX(false);
+    else if (dx < 0) this.heroSprite.setFlipX(true);
 
-      Matter.Body.translate(body, { x: dx, y: dy });
+    /* ================= CAMERA TARGET ================= */
 
-      const collisions = Matter.Query.collides(body, this.collisionBodies);
-      if (collisions.length > 0) {
-        Matter.Body.translate(body, { x: -dx, y: -dy });
-      }
-    };
+    this.cameraTarget.x = this.heroSprite.x;
+    this.cameraTarget.y = this.heroSprite.y;
 
-    tryMove(vx * this.speed, 0);
-    tryMove(0, vy * this.speed);
+    /* ================= RENDER TEXTURE ================= */
 
-    this.logicPos.x = body.position.x;
-    this.logicPos.y = body.position.y;
-
-    const px = Math.round(this.logicPos.x);
-    const py = Math.round(this.logicPos.y);
-
-    this.heroSprite.x = px;
-    this.heroSprite.y = py;
-
-    this.cameraTarget.x = px;
-    this.cameraTarget.y = py;
-
-    this.heroSprite.setDepth(this.heroSprite.y);
+    if (this.rt) {
+      this.rt.clear();
+      this.rt.draw(this.children.list);
+    }
   }
 }
