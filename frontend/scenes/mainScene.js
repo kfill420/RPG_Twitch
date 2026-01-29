@@ -193,12 +193,11 @@ attack() {
   }
 
   update(time, delta) {
-    if (this.isAttacking) return;
 
     const isRunning = this.keys.SHIFT.isDown;
-
-    const baseSpeed = isRunning ? 0.20 : 0.05;
-    const normalizeSpeed = baseSpeed * delta;
+    const attackMultiplier = this.isAttacking ? 0.2 : 1.0;
+    const baseSpeed = isRunning ? 0.10 : 0.05;
+    const normalizeSpeed = baseSpeed * delta * attackMultiplier;
 
     let vx = 0;
     let vy = 0;
@@ -209,20 +208,24 @@ attack() {
     if (this.cursors.up.isDown || this.keys.Z.isDown) vy = -1;
     else if (this.cursors.down.isDown || this.keys.S.isDown) vy = 1;
 
-    if (vx > 0) {
-      this.heroSprite.setFlipX(false);
-    } else if (vx < 0) {
-      this.heroSprite.setFlipX(true);
-    }
+    if (vx > 0) this.heroSprite.setFlipX(false);
+    else if (vx < 0) this.heroSprite.setFlipX(true);
 
-    if (vx !== 0 || vy !== 0) {
-      if (this.heroSprite.anims.currentAnim?.key !== "run") {
-        this.heroSprite.play("run");
-      }
+    if (this.isAttacking) {
+        if (this.heroSprite.anims.currentAnim?.key !== "attack") {
+            this.heroSprite.play("attack");
+        }
     } else {
-      if (this.heroSprite.anims.currentAnim?.key !== "idle") {
-        this.heroSprite.play("idle");
-      }
+        if (vx !== 0 || vy !== 0) {
+            const animToPlay = isRunning ? "run" : "walk";
+            if (this.heroSprite.anims.currentAnim?.key !== animToPlay) {
+                this.heroSprite.play(animToPlay);
+            }
+        } else {
+            if (this.heroSprite.anims.currentAnim?.key !== "idle") {
+                this.heroSprite.play("idle");
+            }
+        }
     }
 
     const Matter = this.Matter;
