@@ -15,6 +15,14 @@ export default class MainScene extends Phaser.Scene {
       );
     }
 
+    for (let i = 0; i <= 23; i++) {
+      const num = i.toString().padStart(3, "0");
+      this.load.image(
+        `hero-walk-${i}`,
+        `./assets/character/forest_ranger/3/walking/0_Forest_Ranger_Walking_${num}.png`
+      );
+    }
+
     for (let i = 0; i <= 11; i++) {
       const num = i.toString().padStart(3, "0");
       this.load.image(
@@ -23,8 +31,7 @@ export default class MainScene extends Phaser.Scene {
       );
     }
 
-      // Dans preload()
-    for (let i = 0; i <= 11; i++) { // Ajuste selon le nombre de frames
+    for (let i = 0; i <= 11; i++) {
         const num = i.toString().padStart(3, "0");
         this.load.image(
           `hero-attack-${i}`, 
@@ -145,6 +152,15 @@ attack() {
     this.heroSprite.play("idle");
 
     this.anims.create({
+      key: "walk",
+      frames: Array.from({ length: 24 }, (_, i) => ({
+        key: `hero-walk-${i}`
+      })),
+      frameRate: 24,
+      repeat: -1
+    });
+
+    this.anims.create({
       key: "run",
       frames: Array.from({ length: 12 }, (_, i) => ({
         key: `hero-run-${i}`
@@ -173,13 +189,16 @@ attack() {
     this.cameras.main.setZoom(4);
 
     this.cursors = this.input.keyboard.createCursorKeys();
-    this.keys = this.input.keyboard.addKeys("Z,Q,S,D");
+    this.keys = this.input.keyboard.addKeys("Z,Q,S,D,SHIFT");
   }
 
   update(time, delta) {
     if (this.isAttacking) return;
 
-    const normalizeSpeed = 0.10 * delta;
+    const isRunning = this.keys.SHIFT.isDown;
+
+    const baseSpeed = isRunning ? 0.20 : 0.05;
+    const normalizeSpeed = baseSpeed * delta;
 
     let vx = 0;
     let vy = 0;
