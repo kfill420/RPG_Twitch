@@ -22,7 +22,54 @@ export default class MainScene extends Phaser.Scene {
         `./assets/character/forest_ranger/3/running/0_Forest_Ranger_Running_${num}.png`
       );
     }
+
+      // Dans preload()
+    for (let i = 0; i <= 11; i++) { // Ajuste selon le nombre de frames
+        const num = i.toString().padStart(3, "0");
+        this.load.image(
+          `hero-attack-${i}`, 
+          `./assets/character/forest_ranger/3/kicking/0_Forest_Ranger_Kicking_${num}.png`);
+    }
   }
+  
+attack() {
+    if (this.isAttacking) return;
+
+    this.isAttacking = true;
+    this.heroSprite.play("attack");
+
+    // Déterminer la position de la hitbox selon la direction du sprite
+    const direction = this.heroSprite.flipX ? -20 : 20;
+    
+    // Créer une hitbox (capteur invisible)
+    const hitbox = this.matter.add.circle(
+        this.heroSprite.x + direction, 
+        this.heroSprite.y, 
+        15, 
+        { isSensor: true, label: 'heroHitbox' }
+    );
+
+    // Détection des ennemis touchés
+    this.matter.world.on('collisionstart', (event) => {
+        event.pairs.forEach(pair => {
+            const { bodyA, bodyB } = pair;
+            if (bodyA === hitbox || bodyB === hitbox) {
+                const target = bodyA === hitbox ? bodyB : bodyA;
+                if (target.label === 'enemy') {
+                    console.log("Ennemi touché !");
+                    // Appelle ici une fonction target.gameObject.takeDamage()
+                }
+            }
+        });
+    });
+
+    // Nettoyage après l'attaque
+    this.heroSprite.on('animationcomplete-attack', () => {
+        this.isAttacking = false;
+        this.matter.world.remove(hitbox);
+        this.heroSprite.play("idle");
+    });
+}
 
   create() {
     window.gameScene = this;
@@ -66,7 +113,7 @@ export default class MainScene extends Phaser.Scene {
       map.widthInPixels / 2,
       map.heightInPixels / 2,
       "hero-idle-0"
-    ).setScale(0.05);
+    ).setScale(0.04);
 
     this.heroSprite.setOrigin(0.5, 0.7);
 
@@ -106,20 +153,33 @@ export default class MainScene extends Phaser.Scene {
       repeat: -1
     });
 
+    this.isAttacking = false;
+
+    this.anims.create({
+        key: "attack",
+        frames: Array.from({ length: 6 }, (_, i) => ({ key: `hero-attack-${i}` })),
+        frameRate: 15,
+        repeat: 0
+    });
+
+    this.input.keyboard.on("keydown-SPACE", () => {
+        this.attack();
+    });
+
     this.cameraTarget = new Phaser.Math.Vector2(this.heroSprite.x, this.heroSprite.y);
     this.cameras.main.setBounds(0, 0, map.widthInPixels, map.heightInPixels);
     this.cameras.main.startFollow(this.cameraTarget, false, 0.1, 0.1);
-    this.cameras.main.roundPixels = true;
-    this.cameras.main.setZoom(3);
+    this.cameras.main.roundPixels = false;
+    this.cameras.main.setZoom(4);
 
     this.cursors = this.input.keyboard.createCursorKeys();
     this.keys = this.input.keyboard.addKeys("Z,Q,S,D");
-
-    this.speed = 0.3;
   }
 
   update(time, delta) {
-    const normalizeSpeed = 0.15 * delta;
+    if (this.isAttacking) return;
+
+    const normalizeSpeed = 0.10 * delta;
 
     let vx = 0;
     let vy = 0;
@@ -166,8 +226,8 @@ export default class MainScene extends Phaser.Scene {
     this.logicPos.x = body.position.x;
     this.logicPos.y = body.position.y;
       
-    this.heroSprite.x = Math.round(this.logicPos.x);
-    this.heroSprite.y = Math.round(this.logicPos.y);
+    this.heroSprite.x = this.logicPos.x;
+    this.heroSprite.y = this.logicPos.y;
       
     this.cameraTarget.x = this.logicPos.x;
     this.cameraTarget.y = this.logicPos.y;
