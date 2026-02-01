@@ -4,8 +4,11 @@ export default class MainScene extends Phaser.Scene {
   }
 
   preload() {
-    this.load.tilemapTiledJSON("map", "./assets/map.tmj");
-    this.load.image("tiles", "./assets/exterior.png");
+    this.load.tilemapTiledJSON("map", "./assets/map2.tmj");
+    this.load.image("tiles", "./assets/exterior2.png");
+    
+    this.load.image("buisson1", "./assets/environment/Bush1_3x3.png");
+    this.load.image("buisson2", "./assets/environment/Bush2_2x2.png");
 
     for (let i = 0; i <= 17; i++) {
       const num = i.toString().padStart(3, "0");
@@ -107,7 +110,7 @@ slide(vx, vy) {
     this.Matter = Phaser.Physics.Matter.Matter;
 
     const map = this.make.tilemap({ key: "map" });
-    const tileset = map.addTilesetImage("exte", "tiles");
+    const tileset = map.addTilesetImage("exterior", "tiles");
 
     map.createLayer("Ground0", tileset, 0, 0);
     map.createLayer("Ground1", tileset, 0, 0);
@@ -145,12 +148,12 @@ slide(vx, vy) {
       "hero-idle-0"
     ).setScale(0.04);
 
-    this.heroSprite.setOrigin(0.5, 0.7);
+    this.heroSprite.setOrigin(0.5, 0.8);
 
     this.heroBody = this.matter.add.circle(
       this.heroSprite.x,
       this.heroSprite.y,
-      8,
+      5,
       {
         isSensor: true,
         inertia: Infinity
@@ -213,6 +216,29 @@ slide(vx, vy) {
           this.attack(pointer)
         }
     });
+
+    // 1. Créer un groupe pour le Y-Sorting
+    this.sortingGroup = this.add.group();
+
+    // 2. Récupérer les buissons du calque d'objets Tiled
+    const bushObjects = map.getObjectLayer('Bushes')?.objects || [];
+
+    bushObjects.forEach(obj => {
+        // On récupère la clé d'image selon l'ID ou le nom dans Tiled
+        // Ici, j'utilise une logique simple, adapte selon tes noms
+        let textureKey = obj.width === 48 ? "buisson1" : "buisson2";
+
+        // Création du sprite
+        const bush = this.add.sprite(obj.x, obj.y, textureKey);
+        
+        // IMPORTANT : L'origine doit être aux pieds pour le tri (bas-milieu)
+        bush.setOrigin(0, 1);
+        
+        // On l'ajoute au groupe de tri
+        this.sortingGroup.add(bush);
+    });
+
+    this.sortingGroup.add(this.heroSprite);
 
     this.cameraTarget = new Phaser.Math.Vector2(this.heroSprite.x, this.heroSprite.y);
     this.cameras.main.setBounds(0, 0, map.widthInPixels, map.heightInPixels);
@@ -301,10 +327,15 @@ slide(vx, vy) {
       
     this.heroSprite.x = this.logicPos.x;
     this.heroSprite.y = this.logicPos.y;
+
+    this.sortingGroup.getChildren().forEach(child => {
+      if (child === this.heroSprite)
+        child.setDepth(child.y + 8);
+      else
+        child.setDepth(child.y);
+    });
       
     this.cameraTarget.x = this.logicPos.x;
     this.cameraTarget.y = this.logicPos.y;
-      
-    this.heroSprite.setDepth(this.heroSprite.y);
   }
 }
