@@ -1,4 +1,5 @@
 import Player from '../components/Player.js';
+import Slime from '../components/Slime.js'
 import { setupWorld, applyYSorting } from '../components/WorldUtils.js';
 
 export default class MainScene extends Phaser.Scene {
@@ -11,6 +12,18 @@ export default class MainScene extends Phaser.Scene {
         this.load.json("exterior_data", "./assets/exterior.json");
         this.load.json("assets", "./assets/objects/assets_manifest.json");
 
+        // const loadSlime = (id) => {
+        //     const path = `./assets/mobs/Slimes/${id}/Slime${id}`;
+        //     const config = { frameWidth: 64, frameHeight: 64 };
+
+        //     this.load.spritesheet(`slime${id}-idle`, `${path}_Idle_without_shadow.png`, config);
+        //     this.load.spritesheet(`slime${id}-run`, `${path}_Run_without_shadow.png`, config);
+        //     this.load.spritesheet(`slime${id}-attack`, `${path}_Attack_without_shadow.png`, config);
+        //     this.load.spritesheet(`slime${id}-hurt`, `${path}_Hurt_without_shadow.png`, config);
+        //     this.load.spritesheet(`slime${id}-death`, `${path}_Death_without_shadow.png`, config);
+        // };
+        // [1, 2, 3].forEach(id => loadSlime(id));
+
         this.load.once("filecomplete-json-assets", () => {
             const data = this.cache.json.get("assets");
             if (data?.images) data.images.forEach(img => this.load.image(img.key, img.url));
@@ -22,11 +35,23 @@ export default class MainScene extends Phaser.Scene {
                 this.load.image(`hero-${key}-${i}`, `./assets/character/forest_ranger/3/${folder}/0_Forest_Ranger_${prefix}_${num}.png`);
             }
         };
+
+        const loadWeaponAnims = (weaponName, key, folder, prefix, count) => {
+            for (let i = 0; i <= count; i++) {
+                const num = i.toString().padStart(3, "0");
+                // ATTENTION : Vérifie bien le chemin vers tes images de baseball !
+                this.load.image(`${weaponName}-${key}-${i}`, `./assets/weapons/${weaponName}/${folder}/${prefix}_${num}.png`);
+            }
+        };
+
         loadHeroAnims('idle', 'idle', 'Idle', 17);
         loadHeroAnims('walk', 'walking', 'Walking', 23);
         loadHeroAnims('run', 'running', 'Running', 11);
-        loadHeroAnims('attack', 'kicking', 'Kicking', 11);
+        loadHeroAnims('kick', 'kicking', 'Kicking', 11);
+        loadHeroAnims('attack', 'attacking', 'Attacking', 11);
         loadHeroAnims('slide', 'sliding', 'Sliding', 5);
+
+        loadWeaponAnims('baseball', 'attacking', 'Attacking', '0_Forest_Ranger_Baseball', 11);
     }
 
     create() {
@@ -57,14 +82,8 @@ export default class MainScene extends Phaser.Scene {
             });
         }
 
-        // 2. CRÉATION DE LA MAP VIA LA CLÉ (Maintenant que le cache est patché)
         const map = this.make.tilemap({ key: "map" });
-        
-        // On vérifie si Phaser voit enfin les calques
-        console.log("Calques détectés par Phaser :", map.getTileLayerNames());
 
-        // 3. INITIALISATION DES TILESETS ET CALQUES
-        // Assure-toi que "exterior" est bien le nom du tileset dans Tiled
         const tileset = map.addTilesetImage("exterior", "tiles");
 
         const layers = {};
@@ -82,7 +101,6 @@ export default class MainScene extends Phaser.Scene {
         if (layers["Obstacle3_Visual"]) layers["Obstacle3_Visual"].setDepth(5000);
         if (layers["Above1"]) layers["Above1"].setDepth(9999);
 
-        // 4. PHYSIQUE MATTER (Tilemaps)
         const collisionLayers = [
             layers["Obstacle0"], layers["Obstacle1"], 
             layers["Obstacle2"], layers["Obstacle3_Collision"]
@@ -101,6 +119,7 @@ export default class MainScene extends Phaser.Scene {
         // On passe map et non mapData à setupWorld
         this.sortingGroup = setupWorld(this, map); 
         this.sortingGroup.add(this.player.sprite);
+        this.sortingGroup.add(this.player.weaponSprite);
 
         // 6. CAMÉRA ET INPUTS
         this.cameras.main.setBounds(0, 0, map.widthInPixels, map.heightInPixels);
@@ -108,13 +127,51 @@ export default class MainScene extends Phaser.Scene {
         
         this.cursors = this.input.keyboard.createCursorKeys();
         this.keys = this.input.keyboard.addKeys("Z,Q,S,D,SHIFT,CTRL");
-        this.input.on("pointerdown", (p) => this.player.attack(p));
+        this.input.on("pointerdown", () => {
+
+            if (!this.player.currentWeapon || this.player.currentWeapon === '')
+                this.player.kick();
+            else
+            this.player.attack();
+        });
+
+        this.input.mouse.disableContextMenu();
 
         this.staticBodies = this.matter.world.localWorld.bodies.filter(b => b.isStatic);
+
+        // this.enemies = [];
+
+        // // On crée le slime et on le stocke dans une variable temporaire
+        // const firstSlime = new Slime(this, 400, 400, 1);
+        // this.enemies.push(firstSlime);
+
+        // // On l'ajoute au groupe de tri pour qu'il passe derrière/devant le joueur
+        // this.sortingGroup.add(firstSlime.sprite);
+
+        // Gestion des dégâts
+        this.matter.world.on('collisionstart', (event) => {
+            event.pairs.forEach(pair => {
+                const { bodyA, bodyB } = pair;
+
+                // Si la hitbox du joueur touche un ennemi
+                if (bodyA.label === 'heroHitbox' || bodyA.label === 'heroKick' || 
+                    bodyB.label === 'heroHitbox' || bodyB.label === 'heroKick') {
+                    
+                    // const enemyBody = bodyA.label === 'enemy' ? bodyA : bodyB;
+                    // const enemyInstance = this.enemies.find(e => e.sprite.body === enemyBody);
+                    
+                    // if (enemyInstance) {
+                    //     enemyInstance.takeDamage(1);
+                    // }
+                }
+            });
+        });
+    
     }
 
     update(time, delta) {
         if (this.player) this.player.update(this.cursors, this.keys, delta, this.staticBodies);
         if (this.sortingGroup) applyYSorting(this.sortingGroup, this.player.sprite);
+        // this.enemies.forEach(enemy => enemy.update(this.player.sprite));
     }
 }
