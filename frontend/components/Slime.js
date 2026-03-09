@@ -2,17 +2,22 @@ export default class Slime {
     constructor(scene, x, y, type = 1) {
         this.scene = scene;
         this.type = type;
-        this.hp = 3;
+        this.hp = 5;
         this.isHurt = false;
         this.isDead = false;
         this.state = "WANDER";
         this.nextDecisionTime = 0;
         this.wanderVec = new Phaser.Math.Vector2();
-        this.detectionRange = 70;
+        this.detectionRange = 80;
+        this.avoidanceTimer = 0;
+        this.detourSide = 1.57;
+        this.attackRange = 20;
+        this.isAttacking = false;
 
         // Création du sprite avec Matter
         this.sprite = scene.matter.add.sprite(x, y, `slime${type}-idle`, 0);
-        this.sprite.setBody({ type: 'circle', radius: 12 }); // Hitbox circulaire au centre
+        this.sprite.setScale(0.7);
+        this.sprite.setBody({ type: 'circle', radius: 5 }); // Hitbox circulaire au centre
         this.sprite.setFixedRotation();
         this.sprite.setFrictionAir(0.1);
         this.sprite.body.label = 'enemy'; // Important pour les collisions dans MainScene
@@ -50,6 +55,19 @@ export default class Slime {
                     repeat: -1
                 });
             }
+
+            // Attack (10 colonnes)
+            if (!anims.exists(`slime${t}-attack-${dir}`)) {
+                anims.create({
+                    key: `slime${t}-attack-${dir}`,
+                    frames: anims.generateFrameNumbers(`slime${t}-attack`, { 
+                        start: rowIndex * 10, 
+                        end: (rowIndex * 10) + 9 
+                    }),
+                    frameRate: 12,
+                    repeat: 0 // Ne pas boucler l'attaque
+                });
+            }
         });
 
         // Animation de mort (10 colonnes - On prend souvent la ligne de face)
@@ -64,13 +82,17 @@ export default class Slime {
     }
 
     update(playerSprite, staticBodies) {
-        if (this.isDead || this.isHurt) return;
+        if (this.isDead || this.isHurt || this.isAttacking) return;
 
         const distanceToPlayer = Phaser.Math.Distance.Between(this.sprite.x, this.sprite.y, playerSprite.x, playerSprite.y);
         const time = this.scene.time.now;
 
         // --- MACHINE À ÉTATS ---
-        if (distanceToPlayer < this.detectionRange) {
+        if (distanceToPlayer < this.attackRange) {
+            this.attack(playerSprite);
+            return;
+        }
+        else if (distanceToPlayer < this.detectionRange) {
             this.state = 'CHASE';
         } else if (this.state === 'CHASE' && distanceToPlayer > this.detectionRange * 1.5) {
             // Le slime abandonne si le joueur s'éloigne trop
@@ -83,9 +105,30 @@ export default class Slime {
 
         if (this.state === 'CHASE') {
             // Logique de poursuite
-            const angle = Phaser.Math.Angle.Between(this.sprite.x, this.sprite.y, playerSprite.x, playerSprite.y);
-            moveVec.set(Math.cos(angle), Math.sin(angle));
             speed = 0.25;
+            const targetAngle = Phaser.Math.Angle.Between(this.sprite.x, this.sprite.y, playerSprite.x, playerSprite.y);
+            const rayDistance = 20; // Longueur de "l'antenne"
+        const rayX = this.sprite.x + Math.cos(targetAngle) * rayDistance;
+        const rayY = this.sprite.y + Math.sin(targetAngle) * rayDistance;
+
+        // On regarde si notre rayon touche un mur
+        // On regarde si notre rayon touche un mur
+        const isBlocked = this.scene.matter.query.point(staticBodies, { x: rayX, y: rayY }).length > 0;
+                
+        // Si bloqué OU si on est déjà en train de faire un détour (pendant 500ms)
+        if (isBlocked || time < this.avoidanceTimer) {
+            if (isBlocked && time > this.avoidanceTimer) {
+                // On déclenche un nouveau détour de 500ms dès qu'on sent un mur
+                this.avoidanceTimer = time + 500; 
+            }
+            // On applique l'angle de détour au lieu de l'angle direct
+            const detourAngle = targetAngle + this.detourSide; 
+            moveVec.set(Math.cos(detourAngle), Math.sin(detourAngle));
+        } else {
+            // Chemin libre
+            moveVec.set(Math.cos(targetAngle), Math.sin(targetAngle));
+        }
+            
         } else {
             // Logique d'errance (WANDER)
             if (time > this.nextDecisionTime) {
@@ -113,13 +156,19 @@ export default class Slime {
             this.scene.matter.body.translate(this.sprite.body, { x: vx, y: 0 });
             if (this.scene.matter.query.collides(this.sprite.body, staticBodies).length > 0) {
                 this.scene.matter.body.translate(this.sprite.body, { x: -vx, y: 0 });
-                this.nextDecisionTime = 0; // Force une nouvelle direction si on tape un mur
+                if (this.state === 'CHASE') {
+                    this.detourSide *= -1;
+                    this.avoidanceTimer = time + 500; // On relance le chrono de détour
+                }
             }
 
             this.scene.matter.body.translate(this.sprite.body, { x: 0, y: vy });
             if (this.scene.matter.query.collides(this.sprite.body, staticBodies).length > 0) {
                 this.scene.matter.body.translate(this.sprite.body, { x: 0, y: -vy });
-                this.nextDecisionTime = 0;
+                if (this.state === 'CHASE') {
+                    this.detourSide *= -1;
+                    this.avoidanceTimer = time + 500; // On relance le chrono de détour
+                }
             }
 
             // --- ANIMATIONS ---
@@ -166,6 +215,29 @@ export default class Slime {
         this.sprite.once('animationcomplete', () => {
             this.sprite.destroy();
             // Optionnel : Retirer de la liste des ennemis de la scene
+        });
+    }
+
+    attack(playerSprite) {
+        this.isAttacking = true;
+        this.sprite.setVelocity(0, 0);
+
+        // Déterminer la direction de l'attaque vers le joueur
+        const angle = Phaser.Math.Angle.Between(this.sprite.x, this.sprite.y, playerSprite.x, playerSprite.y);
+        const deg = Phaser.Math.RadToDeg(angle);
+        
+        let dir = 'down';
+        if (deg >= -135 && deg <= -45) dir = 'up';
+        else if (deg > -45 && deg < 45) dir = 'right';
+        else if (deg >= 45 && deg <= 135) dir = 'down';
+        else dir = 'left';
+
+        this.sprite.play(`slime${this.type}-attack-${dir}`, true);
+
+        // Une fois l'animation finie, on autorise à nouveau le mouvement
+        this.sprite.once('animationcomplete', () => {
+            this.isAttacking = false;
+            // Optionnel : ajouter un petit cooldown ici pour que le slime n'attaque pas instantanément après
         });
     }
 }
