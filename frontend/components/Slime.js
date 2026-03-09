@@ -5,11 +5,16 @@ export default class Slime {
         this.hp = 3;
         this.isHurt = false;
         this.isDead = false;
+        this.state = "WANDER";
+        this.nextDecisionTime = 0;
+        this.wanderVec = new Phaser.Math.Vector2();
+        this.detectionRange = 70;
 
         // Création du sprite avec Matter
         this.sprite = scene.matter.add.sprite(x, y, `slime${type}-idle`, 0);
         this.sprite.setBody({ type: 'circle', radius: 12 }); // Hitbox circulaire au centre
         this.sprite.setFixedRotation();
+        this.sprite.setFrictionAir(0.1);
         this.sprite.body.label = 'enemy'; // Important pour les collisions dans MainScene
 
         this.createAnims();
@@ -58,22 +63,69 @@ export default class Slime {
         }
     }
 
-    update(playerSprite) {
+    update(playerSprite, staticBodies) {
         if (this.isDead || this.isHurt) return;
 
-        const distance = Phaser.Math.Distance.Between(this.sprite.x, this.sprite.y, playerSprite.x, playerSprite.y);
-        
-        // IA : Si le joueur est à portée (ex: 150px), le slime le suit
-        if (distance < 150 && distance > 15) {
-            const angle = Phaser.Math.Angle.Between(this.sprite.x, this.sprite.y, playerSprite.x, playerSprite.y);
-            const speed = 0.001; // Force légère pour Matter
-            
-            this.sprite.applyForce({ x: Math.cos(angle) * speed, y: Math.sin(angle) * speed });
+        const distanceToPlayer = Phaser.Math.Distance.Between(this.sprite.x, this.sprite.y, playerSprite.x, playerSprite.y);
+        const time = this.scene.time.now;
 
-            // Déterminer la direction pour l'anim
+        // --- MACHINE À ÉTATS ---
+        if (distanceToPlayer < this.detectionRange) {
+            this.state = 'CHASE';
+        } else if (this.state === 'CHASE' && distanceToPlayer > this.detectionRange * 1.5) {
+            // Le slime abandonne si le joueur s'éloigne trop
+            this.state = 'WANDER';
+            this.nextDecisionTime = 0; 
+        }
+
+        let moveVec = new Phaser.Math.Vector2(0, 0);
+        let speed = 0;
+
+        if (this.state === 'CHASE') {
+            // Logique de poursuite
+            const angle = Phaser.Math.Angle.Between(this.sprite.x, this.sprite.y, playerSprite.x, playerSprite.y);
+            moveVec.set(Math.cos(angle), Math.sin(angle));
+            speed = 0.25;
+        } else {
+            // Logique d'errance (WANDER)
+            if (time > this.nextDecisionTime) {
+                // Décider d'une nouvelle direction ou d'une pause
+                const pause = Math.random() > 0.7; // 30% de chance de rester immobile
+                if (pause) {
+                    this.wanderVec.set(0, 0);
+                } else {
+                    // Direction aléatoire
+                    const randomAngle = Math.random() * Math.PI * 2;
+                    this.wanderVec.set(Math.cos(randomAngle), Math.sin(randomAngle));
+                }
+                this.nextDecisionTime = time + Phaser.Math.Between(1000, 3000); // Prochaine décision dans 1-3s
+            }
+            moveVec.copy(this.wanderVec);
+            speed = 0.1; // Plus lent quand il erre
+        }
+
+        // --- APPLICATION DU MOUVEMENT ---
+        if (moveVec.length() > 0) {
+            const vx = moveVec.x * speed;
+            const vy = moveVec.y * speed;
+
+            // On vérifie les murs avant de valider le déplacement
+            this.scene.matter.body.translate(this.sprite.body, { x: vx, y: 0 });
+            if (this.scene.matter.query.collides(this.sprite.body, staticBodies).length > 0) {
+                this.scene.matter.body.translate(this.sprite.body, { x: -vx, y: 0 });
+                this.nextDecisionTime = 0; // Force une nouvelle direction si on tape un mur
+            }
+
+            this.scene.matter.body.translate(this.sprite.body, { x: 0, y: vy });
+            if (this.scene.matter.query.collides(this.sprite.body, staticBodies).length > 0) {
+                this.scene.matter.body.translate(this.sprite.body, { x: 0, y: -vy });
+                this.nextDecisionTime = 0;
+            }
+
+            // --- ANIMATIONS ---
+            const angle = Math.atan2(moveVec.y, moveVec.x);
             const deg = Phaser.Math.RadToDeg(angle);
             let dir = 'down';
-
             if (deg >= -135 && deg <= -45) dir = 'up';
             else if (deg > -45 && deg < 45) dir = 'right';
             else if (deg >= 45 && deg <= 135) dir = 'down';
@@ -81,8 +133,8 @@ export default class Slime {
 
             this.sprite.play(`slime${this.type}-run-${dir}`, true);
         } else {
-            // Idle selon la dernière direction ou face
             this.sprite.play(`slime${this.type}-idle-down`, true);
+            this.sprite.setVelocity(0, 0);
         }
     }
 

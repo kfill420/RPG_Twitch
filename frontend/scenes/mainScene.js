@@ -12,17 +12,17 @@ export default class MainScene extends Phaser.Scene {
         this.load.json("exterior_data", "./assets/exterior.json");
         this.load.json("assets", "./assets/objects/assets_manifest.json");
 
-        // const loadSlime = (id) => {
-        //     const path = `./assets/mobs/Slimes/${id}/Slime${id}`;
-        //     const config = { frameWidth: 64, frameHeight: 64 };
+        const loadSlime = (id) => {
+            const path = `./assets/mobs/Slimes/${id}/Slime${id}`;
+            const config = { frameWidth: 64, frameHeight: 64 };
 
-        //     this.load.spritesheet(`slime${id}-idle`, `${path}_Idle_without_shadow.png`, config);
-        //     this.load.spritesheet(`slime${id}-run`, `${path}_Run_without_shadow.png`, config);
-        //     this.load.spritesheet(`slime${id}-attack`, `${path}_Attack_without_shadow.png`, config);
-        //     this.load.spritesheet(`slime${id}-hurt`, `${path}_Hurt_without_shadow.png`, config);
-        //     this.load.spritesheet(`slime${id}-death`, `${path}_Death_without_shadow.png`, config);
-        // };
-        // [1, 2, 3].forEach(id => loadSlime(id));
+            this.load.spritesheet(`slime${id}-idle`, `${path}_Idle_without_shadow.png`, config);
+            this.load.spritesheet(`slime${id}-run`, `${path}_Run_without_shadow.png`, config);
+            this.load.spritesheet(`slime${id}-attack`, `${path}_Attack_without_shadow.png`, config);
+            this.load.spritesheet(`slime${id}-hurt`, `${path}_Hurt_without_shadow.png`, config);
+            this.load.spritesheet(`slime${id}-death`, `${path}_Death_without_shadow.png`, config);
+        };
+        [1, 2, 3].forEach(id => loadSlime(id));
 
         this.load.once("filecomplete-json-assets", () => {
             const data = this.cache.json.get("assets");
@@ -139,14 +139,14 @@ export default class MainScene extends Phaser.Scene {
 
         this.staticBodies = this.matter.world.localWorld.bodies.filter(b => b.isStatic);
 
-        // this.enemies = [];
+        this.enemies = [];
 
-        // // On crée le slime et on le stocke dans une variable temporaire
-        // const firstSlime = new Slime(this, 400, 400, 1);
-        // this.enemies.push(firstSlime);
-
-        // // On l'ajoute au groupe de tri pour qu'il passe derrière/devant le joueur
-        // this.sortingGroup.add(firstSlime.sprite);
+        // On crée le slime et on le stocke dans une variable temporaire
+        const firstSlime = new Slime(this, 400, 400, 1);
+        this.enemies.push(firstSlime);
+            
+        // On l'ajoute au groupe de tri pour qu'il passe derrière/devant le joueur
+        this.sortingGroup.add(firstSlime.sprite);
 
         // Gestion des dégâts
         this.matter.world.on('collisionstart', (event) => {
@@ -157,12 +157,12 @@ export default class MainScene extends Phaser.Scene {
                 if (bodyA.label === 'heroHitbox' || bodyA.label === 'heroKick' || 
                     bodyB.label === 'heroHitbox' || bodyB.label === 'heroKick') {
                     
-                    // const enemyBody = bodyA.label === 'enemy' ? bodyA : bodyB;
-                    // const enemyInstance = this.enemies.find(e => e.sprite.body === enemyBody);
+                    const enemyBody = bodyA.label === 'enemy' ? bodyA : bodyB;
+                    const enemyInstance = this.enemies.find(e => e.sprite.body === enemyBody);
                     
-                    // if (enemyInstance) {
-                    //     enemyInstance.takeDamage(1);
-                    // }
+                    if (enemyInstance) {
+                        enemyInstance.takeDamage(1);
+                    }
                 }
             });
         });
@@ -172,6 +172,12 @@ export default class MainScene extends Phaser.Scene {
     update(time, delta) {
         if (this.player) this.player.update(this.cursors, this.keys, delta, this.staticBodies);
         if (this.sortingGroup) applyYSorting(this.sortingGroup, this.player.sprite);
-        // this.enemies.forEach(enemy => enemy.update(this.player.sprite));
+        this.enemies = this.enemies.filter(enemy => {
+        if (enemy.sprite && enemy.sprite.active) {
+            enemy.update(this.player.sprite, this.staticBodies);
+            return true;
+        }
+        return false;
+    });
     }
 }

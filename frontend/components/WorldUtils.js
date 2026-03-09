@@ -46,7 +46,8 @@ export const setupWorld = (scene, map) => {
 
 export const applyYSorting = (group, heroSprite) => {
     group.getChildren().forEach(child => {
-        const depthOffset = (child === heroSprite) ? 8 : 0;
+        const isEntity = (child === heroSprite) || (child.body && !child.body.isStatic);
+        const depthOffset = isEntity ? 8 : 0;
         child.setDepth(child.y + depthOffset);
     });
 };
