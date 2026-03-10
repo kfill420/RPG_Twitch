@@ -129,13 +129,15 @@ export default class MainScene extends Phaser.Scene {
         this.keys = this.input.keyboard.addKeys("Z,Q,S,D,SHIFT,CTRL");
         this.input.on("pointerdown", () => {
 
-            if (!this.player.currentWeapon || this.player.currentWeapon === '')
+            if ((!this.player.currentWeapon || this.player.currentWeapon === '') && this.player.stamina > this.player.staminaKickCost)
                 this.player.kick();
-            else
-            this.player.attack();
+            else if (this.player.stamina > this.player.staminaAttackCost)
+                this.player.attack();
         });
 
         this.input.mouse.disableContextMenu();
+
+        this.scene.run('UIScene');
 
         this.staticBodies = this.matter.world.localWorld.bodies.filter(b => b.isStatic);
 
@@ -143,41 +145,49 @@ export default class MainScene extends Phaser.Scene {
 
         // On crée le slime et on le stocke dans une variable temporaire
         const firstSlime = new Slime(this, 400, 400, 1);
-        this.enemies.push(firstSlime);
+        const secondSlime = new Slime(this, 400, 400, 2);
+        const thirdSlime = new Slime(this, 400, 400, 3);
+        this.enemies.push(firstSlime, secondSlime, thirdSlime);
             
         // On l'ajoute au groupe de tri pour qu'il passe derrière/devant le joueur
         this.sortingGroup.add(firstSlime.sprite);
 
         // Gestion des dégâts
         this.matter.world.on('collisionstart', (event) => {
-    event.pairs.forEach(pair => {
-        const { bodyA, bodyB } = pair;
+        event.pairs.forEach(pair => {
+            const { bodyA, bodyB } = pair;
 
-        // Définition des rôles
-        const isPlayerA = bodyA.label === 'heroBody';
-        const isPlayerB = bodyB.label === 'heroBody';
-        const playerBody = isPlayerA ? bodyA : (isPlayerB ? bodyB : null);
-        const otherBody = isPlayerA ? bodyB : (isPlayerB ? bodyA : null);
+            // Définition des rôles
+            const isPlayerA = bodyA.label === 'heroBody';
+            const isPlayerB = bodyB.label === 'heroBody';
+            const playerBody = isPlayerA ? bodyA : (isPlayerB ? bodyB : null);
+            const otherBody = isPlayerA ? bodyB : (isPlayerB ? bodyA : null);
 
-        // --- CAS 1 : LE JOUEUR FRAPPE L'ENNEMI ---
-        if (bodyA.label === 'heroHitbox' || bodyA.label === 'heroKick' || 
-            bodyB.label === 'heroHitbox' || bodyB.label === 'heroKick') {
-            const enemyBody = bodyA.label === 'enemy' ? bodyA : bodyB;
-            const enemyInstance = this.enemies.find(e => e.sprite && e.sprite.body === enemyBody);
-            if (enemyInstance) enemyInstance.takeDamage(1);
-        }
+            // --- CAS 1 : LE JOUEUR FRAPPE L'ENNEMI ---
+            if (bodyA.label === 'heroHitbox' || bodyA.label === 'heroKick' || 
+                bodyB.label === 'heroHitbox' || bodyB.label === 'heroKick') {
+                const enemyBody = bodyA.label === 'enemy' ? bodyA : bodyB;
+                const enemyInstance = this.enemies.find(e => e.sprite && e.sprite.body === enemyBody);
+                if (enemyInstance) enemyInstance.takeDamage(1);
+            }
 
-        // --- CAS 2 : CONTACT PHYSIQUE (Le joueur rentre dans le slime) ---
-        if (playerBody && otherBody && otherBody.label === 'enemy') {
-            // Ici on a bien otherBody.position car c'est un corps physique
-            this.player.takeDamage(1, otherBody.position);
-        }
+            // --- CAS 2 : CONTACT PHYSIQUE (Le joueur rentre dans le slime) ---
+            if (playerBody && otherBody && otherBody.label === 'enemy') {
+                // Ici on a bien otherBody.position car c'est un corps physique
+                this.player.takeDamage(1, otherBody.position);
+            }
+        });
     });
-});
     
     }
 
     update(time, delta) {
+                this.events.emit('updateUI', {
+            hp: this.player.hp,
+            maxHp: this.player.maxhp,
+            stamina: this.player.stamina || 10, // Si tu ajoutes la stamina plus tard
+            maxStamina: 10
+        });
         if (this.player) this.player.update(this.cursors, this.keys, delta, this.staticBodies);
         if (this.sortingGroup) applyYSorting(this.sortingGroup, this.player.sprite);
         this.enemies = this.enemies.filter(enemy => {

@@ -15,8 +15,12 @@ export default class Player {
             }
         });
 
+        this.staminaKickCost = 1;
+        this.staminaRunCost = 1;
         this.isAttacking = false;
+        this.staminaAttackCost = 2;
         this.isSliding = false;
+        this.slideStaminaCost = 2;
         this.canSlide = true;
         this.slideSpeed = 0;
         this.slideVec = new Phaser.Math.Vector2();
@@ -28,6 +32,8 @@ export default class Player {
         this.maxhp = 10;
         this.isInvulnerable = false;
 
+        this.stamina=10;
+        this.maxStamina=10;
         this.createSprite(x, y);
     }
 
@@ -90,6 +96,7 @@ export default class Player {
         if (!config) return;
 
         this.isAttacking = true;
+        this.stamina -= 1.5;
         this.weaponSprite.setVisible(true);
         this.playDualAnim("attack");
 
@@ -112,6 +119,7 @@ export default class Player {
     kick() {
         if (this.isAttacking || this.isSliding) return;
         this.isAttacking = true;
+        this.stamina -= 1;
 
         this.playDualAnim("kick");
 
@@ -135,6 +143,7 @@ export default class Player {
         this.isSliding = true;
         this.canSlide = false;
         this.slideSpeed = 0.45;
+        this.stamina -= 1;
         this.slideVec.set(vx, vy).normalize();
         this.playDualAnim("slide");
         this.scene.time.delayedCall(3000, () => { this.canSlide = true; });
@@ -153,7 +162,7 @@ export default class Player {
         else if (cursors.down.isDown || keys.S.isDown) vy = 1;
 
         // Déclenchement des actions
-        if (Phaser.Input.Keyboard.JustDown(keys.CTRL)) this.slide(vx, vy);
+        if (Phaser.Input.Keyboard.JustDown(keys.CTRL) && this.stamina > this.slideStaminaCost) this.slide(vx, vy);
 
         // --- GESTION DYNAMIQUE DE LA VISÉE PENDANT L'ACTION ---
         if (this.isAttacking && this.activeHitbox) {
@@ -199,17 +208,21 @@ export default class Player {
             this.slideSpeed *= 0.975;
             if (this.slideSpeed < 0.03) { this.isSliding = false; this.slideSpeed = 0; }
         } else {
-            const isRunning = keys.SHIFT.isDown;
+            const isRunning = keys.SHIFT.isDown && this.stamina > this.staminaRunCost;
             const speed = isRunning ? 0.10 : 0.05;
             // Ralentissement pendant l'attaque pour plus de réalisme
             currentSpeed = speed * delta * (this.isAttacking ? 0.2 : 1.0);
             finalVx = vx; finalVy = vy;
+            if (isRunning) 
+                this.stamina -= 0.01
+            else 
+                this.stamina = Math.min(this.maxStamina, this.stamina + 0.01)
         }
 
         // Animation de déplacement (seulement si on n'attaque pas et ne glisse pas)
         if (!this.isSliding && !this.isAttacking) {
             if (vx !== 0 || vy !== 0) {
-                const anim = keys.SHIFT.isDown ? "run" : "walk";
+                const anim = (keys.SHIFT.isDown && this.stamina > this.staminaRunCost +1) ? "run" : "walk";
                 this.playDualAnim(anim);
                 this.setDualFlip(vx < 0);
             } else {
@@ -270,8 +283,6 @@ export default class Player {
             this.isInvulnerable = false;
             this.sprite.clearTint();
         });
-
-        console.log(`Vie restante : ${this.hp}`);
 
         if (this.hp <= 0) {
             this.die();

@@ -1,3 +1,4 @@
+import UIScene from "./components/UIScene.js";
 import MainScene from "./scenes/mainScene.js";
 
 const socket = io("http://localhost:3001");
@@ -30,7 +31,7 @@ const config = {
     antialias: false,
     roundPixels: true
   },
-  scene: [MainScene]
+  scene: [MainScene, UIScene]
 };
 
 new Phaser.Game(config);
