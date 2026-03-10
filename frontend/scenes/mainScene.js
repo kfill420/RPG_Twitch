@@ -115,6 +115,14 @@ export default class MainScene extends Phaser.Scene {
 
         // 5. JOUEUR ET OBJETS (Y-Sorting)
         this.player = new Player(this, map.widthInPixels / 2, map.heightInPixels / 2);
+
+        this.scene.launch('UIScene'); // On s'assure qu'elle est lancée
+       const ui = this.scene.get('UIScene');
+       
+       // On équipe l'arme qui est dans le premier slot de l'inventaire
+       if (ui.inventory) {
+           this.player.changeWeapon(ui.inventory[ui.selectedSlot]);
+       }
         
         // On passe map et non mapData à setupWorld
         this.sortingGroup = setupWorld(this, map); 
@@ -182,11 +190,11 @@ export default class MainScene extends Phaser.Scene {
     }
 
     update(time, delta) {
-                this.events.emit('updateUI', {
+        this.events.emit('updateUI', {
             hp: this.player.hp,
             maxHp: this.player.maxhp,
-            stamina: this.player.stamina || 10, // Si tu ajoutes la stamina plus tard
-            maxStamina: 10
+            stamina: this.player.stamina,
+            maxStamina: this.player.maxStamina
         });
         if (this.player) this.player.update(this.cursors, this.keys, delta, this.staticBodies);
         if (this.sortingGroup) applyYSorting(this.sortingGroup, this.player.sprite);

@@ -297,22 +297,20 @@ export default class Player {
         this.scene.matter.world.remove(this.body); // Plus de mouvement physique
     }
 
-    playDualAnim(key) {
+        playDualAnim(key) {
         this.sprite.play(key, true);
-
-        if (key === "attack") {
+        
+        // Si on attaque avec une arme équipée
+        if (key === "attack" && this.currentWeapon !== '') {
             const weaponKey = `${this.currentWeapon}-attack`;
-
             if (this.scene.anims.exists(weaponKey)) {
                 this.weaponSprite.setVisible(true);
-                this.weaponSprite.setAlpha(1); // Sécurité
                 this.weaponSprite.play(weaponKey, true);
             }
         } else {
+            // Si on ne fait pas l'anim "attack", ou si on n'a pas d'arme
+            // On cache le sprite de l'arme (évite d'avoir une batte qui suit le "walk")
             this.weaponSprite.setVisible(false);
-            if (this.weaponSprite.anims && this.weaponSprite.anims.isPlaying) {
-                this.weaponSprite.stop();
-            }
         }
     }
 
@@ -322,28 +320,43 @@ export default class Player {
     }
 
     setWeapon(newWeaponName) {
-    this.currentWeapon = newWeaponName;
-    
-    // On force la recréation des animations pour la nouvelle arme
-    const animKeys = ["idle", "walk", "run", "attack", "slide", "kick"];
-    const anims = this.scene.anims;
+        this.currentWeapon = newWeaponName;
+        
+        // On force la recréation des animations pour la nouvelle arme
+        const animKeys = ["idle", "walk", "run", "attack", "slide", "kick"];
+        const anims = this.scene.anims;
 
-    animKeys.forEach(key => {
-        const weaponKey = `${this.currentWeapon}-${key}`;
-        if (!anims.exists(weaponKey)) {
-            // On récupère les infos de l'anim du héros pour copier le timing
-            const heroAnim = anims.get(key);
-            anims.create({
-                key: weaponKey,
-                frames: Array.from({ length: heroAnim.frames.length }, (_, i) => ({ key: `${this.currentWeapon}-${key}-${i}` })),
-                frameRate: heroAnim.frameRate,
-                repeat: heroAnim.repeat
-            });
+        animKeys.forEach(key => {
+            const weaponKey = `${this.currentWeapon}-${key}`;
+            if (!anims.exists(weaponKey)) {
+                // On récupère les infos de l'anim du héros pour copier le timing
+                const heroAnim = anims.get(key);
+                anims.create({
+                    key: weaponKey,
+                    frames: Array.from({ length: heroAnim.frames.length }, (_, i) => ({ key: `${this.currentWeapon}-${key}-${i}` })),
+                    frameRate: heroAnim.frameRate,
+                    repeat: heroAnim.repeat
+                });
+            }
+        });
+
+        // On relance l'animation actuelle avec la nouvelle texture
+        const currentKey = this.sprite.anims.currentAnim.key;
+        this.weaponSprite.play(`${this.currentWeapon}-${currentKey}`);
+    }
+
+    changeWeapon(weaponKey) {
+        this.currentWeapon = weaponKey;
+        
+        if (this.weaponSprite) {
+            // Si weaponKey est vide, on cache l'arme
+            if (!weaponKey || weaponKey === '') {
+                this.weaponSprite.setVisible(false);
+            } else {
+                this.weaponSprite.setVisible(true);
+                // On change la texture immédiatement pour éviter un sprite vide
+                this.weaponSprite.setTexture(`${weaponKey}-attacking-0`);
+            }
         }
-    });
-
-    // On relance l'animation actuelle avec la nouvelle texture
-    const currentKey = this.sprite.anims.currentAnim.key;
-    this.weaponSprite.play(`${this.currentWeapon}-${currentKey}`);
-}
+    }
 }
