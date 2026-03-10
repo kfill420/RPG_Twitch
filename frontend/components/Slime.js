@@ -1,8 +1,17 @@
 export default class Slime {
     constructor(scene, x, y, type = 1) {
+        const stats = {
+            1: { hp: 2, damage: 1, speed: 0.1, chaseSpeed: 0.25 },
+            2: { hp: 2, damage: 1, speed: 0.15, chaseSpeed: 0.35 },
+            3: { hp: 3, damage: 1, speed: 0.1, chaseSpeed: 0.20 },
+        };
+        const config = stats[type] || stats[1];
+
         this.scene = scene;
         this.type = type;
-        this.hp = 5;
+        this.hp = config.hp;
+        this.baseSpeed = config.speed;
+        this.chaseSpeed = config.chaseSpeed;
         this.isHurt = false;
         this.isDead = false;
         this.state = "WANDER";
@@ -13,7 +22,8 @@ export default class Slime {
         this.detourSide = 1.57;
         this.attackRange = 20;
         this.isAttacking = false;
-        this.damage = 1;
+        this.damage = config.damage;
+        this.hasPlayedMoveSound = false;
 
         // Création du sprite avec Matter
         this.sprite = scene.matter.add.sprite(x, y, `slime${type}-idle`, 0);
@@ -106,29 +116,29 @@ export default class Slime {
 
         if (this.state === 'CHASE') {
             // Logique de poursuite
-            speed = 0.25;
+            speed = this.chaseSpeed;
             const targetAngle = Phaser.Math.Angle.Between(this.sprite.x, this.sprite.y, playerSprite.x, playerSprite.y);
             const rayDistance = 20; // Longueur de "l'antenne"
-        const rayX = this.sprite.x + Math.cos(targetAngle) * rayDistance;
-        const rayY = this.sprite.y + Math.sin(targetAngle) * rayDistance;
+            const rayX = this.sprite.x + Math.cos(targetAngle) * rayDistance;
+            const rayY = this.sprite.y + Math.sin(targetAngle) * rayDistance;
 
-        // On regarde si notre rayon touche un mur
-        // On regarde si notre rayon touche un mur
-        const isBlocked = this.scene.matter.query.point(staticBodies, { x: rayX, y: rayY }).length > 0;
+            // On regarde si notre rayon touche un mur
+            // On regarde si notre rayon touche un mur
+            const isBlocked = this.scene.matter.query.point(staticBodies, { x: rayX, y: rayY }).length > 0;
                 
-        // Si bloqué OU si on est déjà en train de faire un détour (pendant 500ms)
-        if (isBlocked || time < this.avoidanceTimer) {
-            if (isBlocked && time > this.avoidanceTimer) {
-                // On déclenche un nouveau détour de 500ms dès qu'on sent un mur
-                this.avoidanceTimer = time + 500; 
-            }
-            // On applique l'angle de détour au lieu de l'angle direct
-            const detourAngle = targetAngle + this.detourSide; 
-            moveVec.set(Math.cos(detourAngle), Math.sin(detourAngle));
-        } else {
+            // Si bloqué OU si on est déjà en train de faire un détour (pendant 500ms)
+            if (isBlocked || time < this.avoidanceTimer) {
+                if (isBlocked && time > this.avoidanceTimer) {
+                    // On déclenche un nouveau détour de 500ms dès qu'on sent un mur
+                    this.avoidanceTimer = time + 500; 
+                }
+                // On applique l'angle de détour au lieu de l'angle direct
+                const detourAngle = targetAngle + this.detourSide; 
+                moveVec.set(Math.cos(detourAngle), Math.sin(detourAngle));
+            } else {
             // Chemin libre
-            moveVec.set(Math.cos(targetAngle), Math.sin(targetAngle));
-        }
+                moveVec.set(Math.cos(targetAngle), Math.sin(targetAngle));
+            }
             
         } else {
             // Logique d'errance (WANDER)
@@ -145,7 +155,7 @@ export default class Slime {
                 this.nextDecisionTime = time + Phaser.Math.Between(1000, 3000); // Prochaine décision dans 1-3s
             }
             moveVec.copy(this.wanderVec);
-            speed = 0.1; // Plus lent quand il erre
+            speed = this.baseSpeed; // Plus lent quand il erre
         }
 
         // --- APPLICATION DU MOUVEMENT ---
@@ -173,15 +183,47 @@ export default class Slime {
             }
 
             // --- ANIMATIONS ---
+            // --- ANIMATIONS ET SONS SYNCHRONISÉS ---
             const angle = Math.atan2(moveVec.y, moveVec.x);
             const deg = Phaser.Math.RadToDeg(angle);
-            let dir = 'down';
+            
+            // On ne change de direction que si on bouge vraiment pour éviter les scintillements
+            let dir = this.lastDir;
             if (deg >= -135 && deg <= -45) dir = 'up';
             else if (deg > -45 && deg < 45) dir = 'right';
             else if (deg >= 45 && deg <= 135) dir = 'down';
             else dir = 'left';
+            
+            this.lastDir = dir;
+            const animKey = `slime${this.type}-run-${dir}`;
 
-            this.sprite.play(`slime${this.type}-run-${dir}`, true);
+            // On force l'animation
+            this.sprite.play(animKey, true);
+
+            // GESTION DU SON : On vérifie la frame sur l'animation ACTUELLE du sprite
+            const currentAnim = this.sprite.anims.currentAnim;
+            if (currentAnim && currentAnim.key.includes('run')) {
+                const currentFrame = this.sprite.anims.currentFrame.index;
+                
+                // Frame 4 est le moment de l'impact visuel
+                if (currentFrame === 4) {
+                    if (!this.hasPlayedMoveSound) {
+                        const spatial = this.getSpatialConfig();
+                        if (spatial.volumeMod > 0) {
+                            this.scene.sound.play('slime-move', { 
+                                volume: 0.15 * spatial.volumeMod,
+                                pan: spatial.pan,
+                                rate: Phaser.Math.FloatBetween(0.9, 1.1) 
+                            });
+                        }
+                        this.hasPlayedMoveSound = true;
+                    }
+                } else {
+                    // On ne reset le son que lorsqu'on quitte la frame 4
+                    this.hasPlayedMoveSound = false;
+                }
+            }
+            this.sprite.play(animKey, true);
         } else {
             this.sprite.play(`slime${this.type}-idle-down`, true);
             this.sprite.setVelocity(0, 0);
@@ -190,6 +232,11 @@ export default class Slime {
 
     takeDamage(amount) {
         if (this.isHurt || this.isDead) return;
+
+        this.scene.sound.play('slime-hit', { 
+            volume: 0.5, 
+            detune: Phaser.Math.Between(-500, 500) 
+        });
 
         this.hp -= amount;
         this.isHurt = true;
@@ -208,6 +255,7 @@ export default class Slime {
     }
 
     die() {
+        this.scene.sound.play('death-mob', { volume: 0.8 });
         this.isDead = true;
         this.sprite.setSensor(true); // Plus de collisions
         this.sprite.setVelocity(0, 0);
@@ -223,40 +271,55 @@ export default class Slime {
         this.isAttacking = true;
         this.sprite.setVelocity(0, 0);
 
-        // Déterminer la direction de l'attaque vers le joueur
+        const attackConfig = {
+            1: { impactFrame: 6, soundKey: 'slime-splash', volume: 0.4 },
+            2: { impactFrame: 7, soundKey: 'metal-bite', volume: 0.2 },
+            3: { impactFrame: 4, soundKey: 'ground-explosion', volume: 0.5 }
+        };
+        const config = attackConfig[this.type] || attackConfig[1];
+
         const angle = Phaser.Math.Angle.Between(this.sprite.x, this.sprite.y, playerSprite.x, playerSprite.y);
         const deg = Phaser.Math.RadToDeg(angle);
-        
-        let dir = 'down';
-        if (deg >= -135 && deg <= -45) dir = 'up';
-        else if (deg > -45 && deg < 45) dir = 'right';
-        else if (deg >= 45 && deg <= 135) dir = 'down';
-        else dir = 'left';
+        let dir = (deg >= -135 && deg <= -45) ? 'up' : (deg > -45 && deg < 45) ? 'right' : (deg >= 45 && deg <= 135) ? 'down' : 'left';
 
         this.sprite.play(`slime${this.type}-attack-${dir}`, true);
 
-        // Une fois l'animation finie, on autorise à nouveau le mouvement
-        // 1. On écoute la progression de l'animation
         const onUpdate = (anim, frame) => {
-            // Si on arrive à la frame 7 (index 6 ou 7 selon ton export, teste 7 pour l'image 7)
-            if (frame.index === 7) {
-                const dist = Phaser.Math.Distance.Between(this.sprite.x, this.sprite.y, playerSprite.x, playerSprite.y);
+            if (frame.index === config.impactFrame) {
+                const spatial = this.getSpatialConfig();
+                this.scene.sound.play(config.soundKey, { volume: config.volume * spatial.volumeMod, detune: Phaser.Math.Between(-200, 200) });
+                
+                if (this.type === 3) this.scene.cameras.main.shake(200, 0.0005);
 
-                if (dist < this.attackRange + 20) { // +15 pour être un peu plus généreux sur l'impact
-                    this.scene.player.takeDamage(this.damage, this.sprite);
-                }
-                // On retire l'écouteur pour ne pas infliger de dégâts plusieurs fois par attaque
+                const dist = Phaser.Math.Distance.Between(this.sprite.x, this.sprite.y, playerSprite.x, playerSprite.y);
+                if (dist < this.attackRange + 20) this.scene.player.takeDamage(this.damage, this.sprite);
+                
                 this.sprite.off('animationupdate', onUpdate);
             }
         };
 
         this.sprite.on('animationupdate', onUpdate);
-        
-        // 2. On garde le 'animationcomplete' uniquement pour libérer l'état du slime
         this.sprite.once('animationcomplete', () => {
             this.isAttacking = false;
-            // Sécurité : on s'assure que l'événement update est bien coupé
             this.sprite.off('animationupdate', onUpdate);
         });
+    }
+
+    getSpatialConfig() {
+        const cam = this.scene.cameras.main;
+        const centerX = cam.worldView.centerX;
+        const centerY = cam.worldView.centerY;
+        
+        // Calcul de la distance entre le slime et le centre de la caméra
+        const dist = Phaser.Math.Distance.Between(this.sprite.x, this.sprite.y, centerX, centerY);
+        
+        // Volume : 1 au centre, 0 à 400 pixels (ajuste 400 selon ton envie)
+        const maxDist = 300;
+        const volumeMod = Phaser.Math.Clamp(1 - (dist / maxDist), 0, 1);
+        
+        // Pan : -1 (tout à gauche), 0 (centre), 1 (tout à droite)
+        const pan = Phaser.Math.Clamp((this.sprite.x - centerX) / (cam.width / 2), -1, 1);
+        
+        return { volumeMod, pan };
     }
 }

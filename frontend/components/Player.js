@@ -31,9 +31,11 @@ export default class Player {
         this.hp = 10;
         this.maxhp = 10;
         this.isInvulnerable = false;
-
         this.stamina=10;
         this.maxStamina=10;
+        this.lastDamageTime = 0;
+        this.regenRate = 0.0001;
+        this.regenDelay = 10000;
         this.createSprite(x, y);
     }
 
@@ -104,6 +106,7 @@ export default class Player {
         this.isAttacking = true;
         this.stamina -= 1.5;
         this.weaponSprite.setVisible(true);
+        this.scene.sound.play('punch', { volume: 0.4, detune: Phaser.Math.Between(-200, 200) });
         this.playDualAnim("attack");
 
         this.activeHitbox = this.scene.matter.add.circle(this.sprite.x, this.sprite.y, config.radius, { 
@@ -126,7 +129,7 @@ export default class Player {
         if (this.isAttacking || this.isSliding) return;
         this.isAttacking = true;
         this.stamina -= 1;
-
+        this.scene.sound.play('punch', { volume: 0.3, detune: Phaser.Math.Between(-200, 200) });
         this.playDualAnim("kick");
 
         this.activeHitbox = this.scene.matter.add.circle(this.sprite.x, this.sprite.y, 4, { 
@@ -166,6 +169,17 @@ export default class Player {
         else if (cursors.right.isDown || keys.D.isDown) vx = 1;
         if (cursors.up.isDown || keys.Z.isDown) vy = -1;
         else if (cursors.down.isDown || keys.S.isDown) vy = 1;
+
+        // --- LOGIQUE DE RÉGÉNÉRATION ---
+        const currentTime = this.scene.time.now;
+        
+        // Si plus de 10 secondes se sont écoulées depuis le dernier dégât
+        if (currentTime - this.lastDamageTime > this.regenDelay) {
+            if (this.hp < this.maxhp) {
+                // On remonte la vie petit à petit sans dépasser le max
+                this.hp = Math.min(this.maxhp, this.hp + (this.regenRate * delta));
+            }
+        }
 
         // Déclenchement des actions
         if (Phaser.Input.Keyboard.JustDown(keys.CTRL) && this.stamina > this.slideStaminaCost) this.slide(vx, vy);
@@ -231,6 +245,9 @@ export default class Player {
                 const anim = (keys.SHIFT.isDown && this.stamina > this.staminaRunCost +1) ? "run" : "walk";
                 this.playDualAnim(anim);
                 this.setDualFlip(vx < 0);
+                if (!this.scene.sound.get('step')?.isPlaying) {
+                    this.scene.sound.play('step', { volume: 0.2, rate: anim === "run" ? 1.5 : 1.2 });
+                }
             } else {
                 this.playDualAnim("idle");
             }
@@ -262,6 +279,13 @@ export default class Player {
 
     takeDamage(amount, source) {
         if (this.isInvulnerable || this.hp <= 0) return;
+
+        this.lastDamageTime = this.scene.time.now;
+
+        this.scene.sound.play('hurt', { 
+            volume: 0.8,
+            detune: Phaser.Math.Between(-200, 200) 
+        });
 
         this.hp -= amount;
         this.isInvulnerable = true;
@@ -302,6 +326,7 @@ export default class Player {
     }
 
     die() {
+        this.scene.sound.play('death-player', { volume: 0.5 });
         console.log("Le joueur est mort !");
         // Tu peux ici stopper la scène, jouer une animation de mort 
         // ou afficher un écran de Game Over

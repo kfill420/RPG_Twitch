@@ -44,6 +44,17 @@ export default class MainScene extends Phaser.Scene {
             }
         };
 
+        this.load.audio('step', './assets/sounds/step.mp3');
+        this.load.audio('punch', './assets/sounds/punch.mp3');
+        this.load.audio('slime-move', './assets/sounds/slime-move.mp3');
+        this.load.audio('hurt', './assets/sounds/hurt.mp3');
+        this.load.audio('death-player', './assets/sounds/death-player.mp3');
+        this.load.audio('death-mob', './assets/sounds/death-mob.mp3');
+        this.load.audio('slime-hit', './assets/sounds/slime-hit.mp3');
+        this.load.audio('ground-explosion', './assets/sounds/ground-explosion.mp3');
+        this.load.audio('metal-bite', './assets/sounds/metal-bite.mp3');
+        this.load.audio('slime-splash', './assets/sounds/slime-splash.mp3');
+
         loadHeroAnims('idle', 'idle', 'Idle', 17);
         loadHeroAnims('walk', 'walking', 'Walking', 23);
         loadHeroAnims('run', 'running', 'Running', 11);
@@ -156,9 +167,13 @@ export default class MainScene extends Phaser.Scene {
         const secondSlime = new Slime(this, 400, 400, 2);
         const thirdSlime = new Slime(this, 400, 400, 3);
         this.enemies.push(firstSlime, secondSlime, thirdSlime);
+
+        // const secondSlime = new Slime(this, 400, 400, 3);
+        // this.enemies.push(secondSlime);
             
         // On l'ajoute au groupe de tri pour qu'il passe derrière/devant le joueur
-        this.sortingGroup.add(firstSlime.sprite);
+        this.sortingGroup.add(firstSlime.sprite, secondSlime.sprite, thirdSlime.sprite);
+        // this.sortingGroup.add(secondSlime.sprite);
 
         // Gestion des dégâts
         this.matter.world.on('collisionstart', (event) => {
