@@ -235,13 +235,27 @@ export default class Slime {
         this.sprite.play(`slime${this.type}-attack-${dir}`, true);
 
         // Une fois l'animation finie, on autorise à nouveau le mouvement
+        // 1. On écoute la progression de l'animation
+        const onUpdate = (anim, frame) => {
+            // Si on arrive à la frame 7 (index 6 ou 7 selon ton export, teste 7 pour l'image 7)
+            if (frame.index === 7) {
+                const dist = Phaser.Math.Distance.Between(this.sprite.x, this.sprite.y, playerSprite.x, playerSprite.y);
+                
+                if (dist < this.attackRange + 15) { // +15 pour être un peu plus généreux sur l'impact
+                    this.scene.player.takeDamage(1, this.sprite);
+                }
+                // On retire l'écouteur pour ne pas infliger de dégâts plusieurs fois par attaque
+                this.sprite.off('animationupdate', onUpdate);
+            }
+        };
+
+        this.sprite.on('animationupdate', onUpdate);
+        
+        // 2. On garde le 'animationcomplete' uniquement pour libérer l'état du slime
         this.sprite.once('animationcomplete', () => {
             this.isAttacking = false;
-            const dist = Phaser.Math.Distance.Between(this.sprite.x, this.sprite.y, playerSprite.x, playerSprite.y);
-            if (dist < this.attackRange + 10) {
-                // Accéder à l'instance Player via la scène pour lui infliger des dégâts
-                this.scene.player.takeDamage(1, this.sprite);
-            }
+            // Sécurité : on s'assure que l'événement update est bien coupé
+            this.sprite.off('animationupdate', onUpdate);
         });
     }
 }
