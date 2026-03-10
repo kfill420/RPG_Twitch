@@ -5,9 +5,14 @@ export default class Player {
         this.scene = scene;
 
         this.body = scene.matter.add.circle(x, y + 10, 5, {
-            isSensor: true,
+            isSensor: false,
             inertia: Infinity,
-            label: 'heroBody'
+            frictionAir: 0.1,
+            label: 'heroBody',
+            collisionFilter: {
+                category: 0x0002,
+                mask: 0x0001 // Ne collisionne physiquement qu'avec les murs (si tes murs sont en catégorie 1)
+            }
         });
 
         this.isAttacking = false;
@@ -18,6 +23,10 @@ export default class Player {
         this.currentWeapon = 'baseball';
         this.weaponSprite = null;
         this.activeHitbox = null;
+
+        this.hp = 10;
+        this.maxhp = 10;
+        this.isInvulnerable = false;
 
         this.createSprite(x, y);
     }
@@ -132,90 +141,150 @@ export default class Player {
     }
 
     update(cursors, keys, delta, collisionBodies) {
-    const pointer = this.scene.input.activePointer;
-    pointer.updateWorldPoint(this.scene.cameras.main);
-    const mouseX = pointer.worldX;
-    const mouseY = pointer.worldY;
+        const pointer = this.scene.input.activePointer;
+        pointer.updateWorldPoint(this.scene.cameras.main);
+        const mouseX = pointer.worldX;
+        const mouseY = pointer.worldY;
 
-    let vx = 0, vy = 0;
-    if (cursors.left.isDown || keys.Q.isDown) vx = -1;
-    else if (cursors.right.isDown || keys.D.isDown) vx = 1;
-    if (cursors.up.isDown || keys.Z.isDown) vy = -1;
-    else if (cursors.down.isDown || keys.S.isDown) vy = 1;
+        let vx = 0, vy = 0;
+        if (cursors.left.isDown || keys.Q.isDown) vx = -1;
+        else if (cursors.right.isDown || keys.D.isDown) vx = 1;
+        if (cursors.up.isDown || keys.Z.isDown) vy = -1;
+        else if (cursors.down.isDown || keys.S.isDown) vy = 1;
 
-    // Déclenchement des actions
-    if (Phaser.Input.Keyboard.JustDown(keys.CTRL)) this.slide(vx, vy);
+        // Déclenchement des actions
+        if (Phaser.Input.Keyboard.JustDown(keys.CTRL)) this.slide(vx, vy);
 
-    // --- GESTION DYNAMIQUE DE LA VISÉE PENDANT L'ACTION ---
-    if (this.isAttacking && this.activeHitbox) {
-        const isMouseToLeft = mouseX < this.sprite.x;
-        this.sprite.setFlipX(isMouseToLeft);
-        this.weaponSprite.setFlipX(isMouseToLeft);
+        // --- GESTION DYNAMIQUE DE LA VISÉE PENDANT L'ACTION ---
+        if (this.isAttacking && this.activeHitbox) {
+            const isMouseToLeft = mouseX < this.sprite.x;
+            this.sprite.setFlipX(isMouseToLeft);
+            this.weaponSprite.setFlipX(isMouseToLeft);
 
-        // 2. Calcul de l'angle à partir du buste
-        const centerX = this.sprite.x;
-        const centerY = this.sprite.y - 10;
-        const angle = Phaser.Math.Angle.Between(centerX, centerY, mouseX, mouseY);
+            // 2. Calcul de l'angle à partir du buste
+            const centerX = this.sprite.x;
+            const centerY = this.sprite.y - 10;
+            const angle = Phaser.Math.Angle.Between(centerX, centerY, mouseX, mouseY);
+
+            let range, offsetY = 0;
+            if (this.activeHitbox.label === 'heroKick') {
+                range = 8;
+            } else {
+                const config = WEAPON_CONFIG[this.currentWeapon];
+                range = config.range;
+                offsetY = config.offsetY;
+            }
+
+            const hx = centerX + Math.cos(angle) * range;
+            const hy = centerY + Math.sin(angle) * range + offsetY;
+
+            // On force la position de la hitbox
+            this.scene.matter.body.setPosition(this.activeHitbox, { x: hx, y: hy });
+        }
+
+        if (this.isStunned) {
+            // On synchronise quand même les sprites
+            this.sprite.x = this.body.position.x;
+            this.sprite.y = this.body.position.y;
+            this.weaponSprite.x = this.sprite.x;
+            this.weaponSprite.y = this.sprite.y;
+            return; 
+        }
+
+        // Logique de vitesse
+        let finalVx, finalVy, currentSpeed;
+        if (this.isSliding) {
+            finalVx = this.slideVec.x; finalVy = this.slideVec.y;
+            currentSpeed = this.slideSpeed * delta;
+            this.slideSpeed *= 0.975;
+            if (this.slideSpeed < 0.03) { this.isSliding = false; this.slideSpeed = 0; }
+        } else {
+            const isRunning = keys.SHIFT.isDown;
+            const speed = isRunning ? 0.10 : 0.05;
+            // Ralentissement pendant l'attaque pour plus de réalisme
+            currentSpeed = speed * delta * (this.isAttacking ? 0.2 : 1.0);
+            finalVx = vx; finalVy = vy;
+        }
+
+        // Animation de déplacement (seulement si on n'attaque pas et ne glisse pas)
+        if (!this.isSliding && !this.isAttacking) {
+            if (vx !== 0 || vy !== 0) {
+                const anim = keys.SHIFT.isDown ? "run" : "walk";
+                this.playDualAnim(anim);
+                this.setDualFlip(vx < 0);
+            } else {
+                this.playDualAnim("idle");
+            }
+        }
+
+        // Application du mouvement avec collisions
+        const tryMove = (dx, dy) => {
+            this.scene.matter.body.translate(this.body, { x: dx, y: dy });
+            if (this.scene.matter.query.collides(this.body, collisionBodies).length > 0) {
+                this.scene.matter.body.translate(this.body, { x: -dx, y: -dy });
+            }
+        };
+
+        tryMove(finalVx * currentSpeed, 0);
+        tryMove(0, finalVy * currentSpeed);
+
+        // Synchronisation des sprites sur le corps physique
+        this.sprite.x = this.body.position.x;
+        this.sprite.y = this.body.position.y;
+        this.weaponSprite.x = this.sprite.x;
+        this.weaponSprite.y = this.sprite.y;
+    }
+
+    takeDamage(amount, source) {
+        if (this.isInvulnerable || this.hp <= 0) return;
+
+        this.hp -= amount;
+        this.isInvulnerable = true;
+        this.isStunned = true;
+
+        if (source) {
+        // 1. Calculer l'angle entre la source et le joueur
+            const angle = Phaser.Math.Angle.Between(source.x, source.y, this.sprite.x, this.sprite.y);
+            
+            // 2. Créer une force de poussée
+            const power = 1; 
         
-        let range, offsetY = 0;
-        if (this.activeHitbox.label === 'heroKick') {
-            range = 8;
-        } else {
-            const config = WEAPON_CONFIG[this.currentWeapon];
-            range = config.range;
-            offsetY = config.offsetY;
+        // 3. Application IMMEDIATE de la vélocité
+        // On utilise setVelocity plutôt que applyForce pour un effet instantané
+        this.scene.matter.body.setVelocity(this.body, { 
+            x: Math.cos(angle) * power, 
+            y: Math.sin(angle) * power 
+        });
         }
 
-        const hx = centerX + Math.cos(angle) * range;
-        const hy = centerY + Math.sin(angle) * range + offsetY;
+        // Feedback visuel (clignotement rouge)
+        this.sprite.setTint(0xff0000);
 
-        // On force la position de la hitbox
-        this.scene.matter.body.setPosition(this.activeHitbox, { x: hx, y: hy });
-    }
+        this.scene.time.delayedCall(200, () => { 
+            this.isStunned = false; 
+            this.scene.matter.body.setVelocity(this.body, { x: 0, y: 0 });
+        });
+        
+        // On retire l'invulnérabilité et le clignotement après 1 seconde
+        this.scene.time.delayedCall(700, () => {
+            this.isInvulnerable = false;
+            this.sprite.clearTint();
+        });
 
-    // Logique de vitesse
-    let finalVx, finalVy, currentSpeed;
-    if (this.isSliding) {
-        finalVx = this.slideVec.x; finalVy = this.slideVec.y;
-        currentSpeed = this.slideSpeed * delta;
-        this.slideSpeed *= 0.975;
-        if (this.slideSpeed < 0.03) { this.isSliding = false; this.slideSpeed = 0; }
-    } else {
-        const isRunning = keys.SHIFT.isDown;
-        const speed = isRunning ? 0.10 : 0.05;
-        // Ralentissement pendant l'attaque pour plus de réalisme
-        currentSpeed = speed * delta * (this.isAttacking ? 0.2 : 1.0);
-        finalVx = vx; finalVy = vy;
-    }
+        console.log(`Vie restante : ${this.hp}`);
 
-    // Animation de déplacement (seulement si on n'attaque pas et ne glisse pas)
-    if (!this.isSliding && !this.isAttacking) {
-        if (vx !== 0 || vy !== 0) {
-            const anim = keys.SHIFT.isDown ? "run" : "walk";
-            this.playDualAnim(anim);
-            this.setDualFlip(vx < 0);
-        } else {
-            this.playDualAnim("idle");
+        if (this.hp <= 0) {
+            this.die();
         }
     }
 
-    // Application du mouvement avec collisions
-    const tryMove = (dx, dy) => {
-        this.scene.matter.body.translate(this.body, { x: dx, y: dy });
-        if (this.scene.matter.query.collides(this.body, collisionBodies).length > 0) {
-            this.scene.matter.body.translate(this.body, { x: -dx, y: -dy });
-        }
-    };
-
-    tryMove(finalVx * currentSpeed, 0);
-    tryMove(0, finalVy * currentSpeed);
-
-    // Synchronisation des sprites sur le corps physique
-    this.sprite.x = this.body.position.x;
-    this.sprite.y = this.body.position.y;
-    this.weaponSprite.x = this.sprite.x;
-    this.weaponSprite.y = this.sprite.y;
-}
+    die() {
+        console.log("Le joueur est mort !");
+        // Tu peux ici stopper la scène, jouer une animation de mort 
+        // ou afficher un écran de Game Over
+        this.sprite.setTint(0x333333); // Devient gris
+        this.scene.matter.world.remove(this.body); // Plus de mouvement physique
+    }
 
     playDualAnim(key) {
         this.sprite.play(key, true);

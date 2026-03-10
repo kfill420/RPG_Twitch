@@ -150,22 +150,30 @@ export default class MainScene extends Phaser.Scene {
 
         // Gestion des dégâts
         this.matter.world.on('collisionstart', (event) => {
-            event.pairs.forEach(pair => {
-                const { bodyA, bodyB } = pair;
+    event.pairs.forEach(pair => {
+        const { bodyA, bodyB } = pair;
 
-                // Si la hitbox du joueur touche un ennemi
-                if (bodyA.label === 'heroHitbox' || bodyA.label === 'heroKick' || 
-                    bodyB.label === 'heroHitbox' || bodyB.label === 'heroKick') {
-                    
-                    const enemyBody = bodyA.label === 'enemy' ? bodyA : bodyB;
-                    const enemyInstance = this.enemies.find(e => e.sprite.body === enemyBody);
-                    
-                    if (enemyInstance) {
-                        enemyInstance.takeDamage(1);
-                    }
-                }
-            });
-        });
+        // Définition des rôles
+        const isPlayerA = bodyA.label === 'heroBody';
+        const isPlayerB = bodyB.label === 'heroBody';
+        const playerBody = isPlayerA ? bodyA : (isPlayerB ? bodyB : null);
+        const otherBody = isPlayerA ? bodyB : (isPlayerB ? bodyA : null);
+
+        // --- CAS 1 : LE JOUEUR FRAPPE L'ENNEMI ---
+        if (bodyA.label === 'heroHitbox' || bodyA.label === 'heroKick' || 
+            bodyB.label === 'heroHitbox' || bodyB.label === 'heroKick') {
+            const enemyBody = bodyA.label === 'enemy' ? bodyA : bodyB;
+            const enemyInstance = this.enemies.find(e => e.sprite && e.sprite.body === enemyBody);
+            if (enemyInstance) enemyInstance.takeDamage(1);
+        }
+
+        // --- CAS 2 : CONTACT PHYSIQUE (Le joueur rentre dans le slime) ---
+        if (playerBody && otherBody && otherBody.label === 'enemy') {
+            // Ici on a bien otherBody.position car c'est un corps physique
+            this.player.takeDamage(1, otherBody.position);
+        }
+    });
+});
     
     }
 
