@@ -12,9 +12,21 @@ export default class MenuScene extends Phaser.Scene {
     create() {
         const { width, height } = this.scale;
 
+        // Dans MenuScene.js ou BootScene.js
+        const savedVolume = localStorage.getItem('game_volume');
+        if (savedVolume !== null) {
+            this.sound.volume = parseFloat(savedVolume);
+        }
+
         // --- 1. LE DÉGRADÉ (Méthode Canvas pour éviter les paliers) ---
-        const texture = this.textures.createCanvas('menuGradient', width, height);
-        const ctx = texture.getContext();
+        let canvasTexture = this.textures.get('menuGradient');
+
+        // Si la texture n'existe pas, on la crée (évite les erreurs au redémarrage)
+        if (canvasTexture.key === '__MISSING') {
+            canvasTexture = this.textures.createCanvas('menuGradient', width, height);
+        }
+
+        const ctx = canvasTexture.getContext();
         const grd = ctx.createLinearGradient(0, 0, 0, height); // Vertical
         
         // On utilise des couleurs un peu plus espacées pour casser l'effet de paliers
@@ -23,7 +35,7 @@ export default class MenuScene extends Phaser.Scene {
         
         ctx.fillStyle = grd;
         ctx.fillRect(0, 0, width, height);
-        texture.refresh();
+        canvasTexture.refresh();
         
         this.add.image(0, 0, 'menuGradient').setOrigin(0);
 
@@ -52,8 +64,13 @@ export default class MenuScene extends Phaser.Scene {
             this.scene.start('GameScene', { mode: 'solo' });
         });
 
-        this.createButton(width / 2, height * 0.65, 'MODE STREAMER (BIENTÔT)', true, () => {
+        this.createButton(width / 2, height * 0.62, 'MODE STREAMER (BIENTÔT)', true, () => {
             this.cameras.main.shake(200, 0.005);
+        });
+
+        this.createButton(width / 2, height * 0.74, 'RÉGLAGES', false, () => {
+            // On lance la scène de réglages par dessus sans arrêter la scène actuelle
+            this.scene.launch('SettingsScene', { origin: this.scene.key });
         });
     }
 
@@ -84,10 +101,10 @@ export default class MenuScene extends Phaser.Scene {
 
     // 4. Le Texte
     const btnText = this.add.text(0, 0, label, {
-        fontSize: '24px',
+        fontSize: '48px',
         fontFamily: 'Arial Black',
         fill: isLocked ? '#666' : '#fff',
-    }).setOrigin(0.5);
+    }).setOrigin(0.5).setScale(0.5);
 
     container.add([bg, btnText]);
 

@@ -6,10 +6,30 @@ export default class GameScene extends Phaser.Scene {
     constructor() { super("GameScene"); }
 
     init(data) {
-    // Si data.mode n'existe pas, on met 'solo' par défaut
-    this.gameMode = data.mode || 'solo';
-    console.log("Démarrage du jeu en mode :", this.gameMode);
-}
+        // Si data.mode n'existe pas, on met 'solo' par défaut
+        this.gameMode = data.mode || 'solo';
+        console.log("Démarrage du jeu en mode :", this.gameMode);
+    }
+
+    updateControls() {
+        // On récupère les noms des touches sauvegardées
+        const up = localStorage.getItem('key_up') || 'Z';
+        const down = localStorage.getItem('key_down') || 'S';
+        const left = localStorage.getItem('key_left') || 'Q';
+        const right = localStorage.getItem('key_right') || 'D';
+        const shift = localStorage.getItem('key_shift') || 'SHIFT';
+        const ctrl = localStorage.getItem('key_ctrl') || 'CTRL';
+
+        // On crée l'objet de touches
+        this.keys = this.input.keyboard.addKeys({
+            up: up,
+            down: down,
+            left: left,
+            right: right,
+            shift: shift,
+            ctrl: ctrl
+        });
+    }
 
     preload() {
         this.load.tilemapTiledJSON("map", "./assets/map2.tmj");
@@ -148,10 +168,33 @@ export default class GameScene extends Phaser.Scene {
         // 6. CAMÉRA ET INPUTS
         this.cameras.main.setBounds(0, 0, map.widthInPixels, map.heightInPixels);
         this.cameras.main.startFollow(this.player.sprite, false, 0.1, 0.1).setZoom(4);
+
+        // Dans GameScene.js
+        this.input.keyboard.on('keydown-ESC', () => {
+            // Si la scène de réglages n'est pas déjà ouverte
+            if (!this.scene.isActive('SettingsScene')) {
+                // On la lance par-dessus, SANS mettre en pause la GameScene
+                this.scene.launch('SettingsScene', { origin: this.scene.key });
+            } else {
+                // Si on appuie sur Echap alors qu'elle est ouverte, on la ferme
+                this.scene.stop('SettingsScene');
+            }
+        });
+
+        // Pour reprendre le jeu quand on ferme les réglages
+        this.events.on('resume', () => {
+            console.log('Jeu repris');
+        });
         
         this.cursors = this.input.keyboard.createCursorKeys();
-        this.keys = this.input.keyboard.addKeys("Z,Q,S,D,SHIFT,CTRL");
+        // Dans GameScene.js (create)
+        this.updateControls();
+            
+        // Si tu veux que les touches changent sans redémarrer le jeu :
+        const settings = this.scene.get('SettingsScene');
+        settings.events.on('keyChanged', () => this.updateControls());
         this.input.on("pointerdown", () => {
+            if (this.scene.isActive('SettingsScene')) return;
 
             if ((!this.player.currentWeapon || this.player.currentWeapon === '') && this.player.stamina > this.player.staminaKickCost)
                 this.player.kick();
@@ -210,19 +253,30 @@ export default class GameScene extends Phaser.Scene {
     }
 
     update(time, delta) {
+        if (!this.scene.isActive('SettingsScene')) {
+            if (this.player) {
+                this.player.update(null, this.keys, delta, this.staticBodies);
+            }
+        } else {
+            if (this.player && this.player.body) {
+                this.matter.body.setVelocity(this.player.body, { x: 0, y: 0 });
+            }
+        }
+
         this.events.emit('updateUI', {
             hp: this.player.hp,
             maxHp: this.player.maxhp,
             stamina: this.player.stamina,
             maxStamina: this.player.maxStamina
         });
-        if (this.player) this.player.update(this.cursors, this.keys, delta, this.staticBodies);
+
         if (this.sortingGroup) applyYSorting(this.sortingGroup, this.player.sprite);
+
         this.enemies = this.enemies.filter(enemy => {
-        if (enemy.sprite && enemy.sprite.active) {
-            enemy.update(this.player.sprite, this.staticBodies);
-            return true;
-        }
+            if (enemy.sprite && enemy.sprite.active) {
+                enemy.update(this.player.sprite, this.staticBodies);
+                return true;
+            }
         return false;
     });
     }

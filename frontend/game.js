@@ -1,6 +1,7 @@
 import MenuScene from "./scenes/menuScene.js";
 import UIScene from "./components/UIScene.js";
 import GameScene from "./scenes/gameScene.js";
+import SettingsScene from "./scenes/settingsScene.js";
 
 const socket = io("http://localhost:3001");
 
@@ -23,7 +24,7 @@ const config = {
   physics: {
     default: "matter",
     matter: {
-      debug: false, 
+      debug: true, 
       gravity: { y: 0 }
     }
   },
@@ -32,7 +33,7 @@ const config = {
     antialias: false,
     roundPixels: true
   },
-  scene: [MenuScene, GameScene, UIScene]
+  scene: [MenuScene, GameScene, UIScene, SettingsScene]
 };
 
 new Phaser.Game(config);

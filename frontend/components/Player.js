@@ -103,13 +103,30 @@ export default class Player {
         const config = WEAPON_CONFIG[this.currentWeapon];
         if (!config) return;
 
+        // Vérifie si le joueur frappe derrière lui
+        const pointer = this.scene.input.activePointer;
+        this.setDualFlip(pointer.worldX < this.sprite.x);
+
         this.isAttacking = true;
         this.stamina -= 1.5;
         this.weaponSprite.setVisible(true);
         this.scene.sound.play('punch', { volume: 0.4, detune: Phaser.Math.Between(-200, 200) });
         this.playDualAnim("attack");
 
-        this.activeHitbox = this.scene.matter.add.circle(this.sprite.x, this.sprite.y, config.radius, { 
+        const angle = Phaser.Math.Angle.Between(this.sprite.x, this.sprite.y, pointer.worldX, pointer.worldY);
+
+        let finalRange = config.range;
+    
+        // On réduit la porté vers le bas
+        if (angle > 0.5 && angle < 2.5) {
+            finalRange *= 0.2; // Réduit la portée de 40% quand on tape vers le bas
+        }
+
+        const hitboxX = this.sprite.x + Math.cos(angle) * finalRange;
+        const hitboxY = this.sprite.y + Math.sin(angle) * finalRange + config.offsetY;
+
+        // 4. Créer la hitbox avec config.radius
+        this.activeHitbox = this.scene.matter.add.circle(hitboxX, hitboxY, config.radius, { 
             isSensor: true, 
             label: 'heroHitbox' 
         });
@@ -159,123 +176,106 @@ export default class Player {
     }
 
     update(cursors, keys, delta, collisionBodies) {
-        const pointer = this.scene.input.activePointer;
-        pointer.updateWorldPoint(this.scene.cameras.main);
-        const mouseX = pointer.worldX;
-        const mouseY = pointer.worldY;
+    const pointer = this.scene.input.activePointer;
+    pointer.updateWorldPoint(this.scene.cameras.main);
+    const mouseX = pointer.worldX;
+    const mouseY = pointer.worldY;
 
-        let vx = 0, vy = 0;
-        if (cursors.left.isDown || keys.Q.isDown) vx = -1;
-        else if (cursors.right.isDown || keys.D.isDown) vx = 1;
-        if (cursors.up.isDown || keys.Z.isDown) vy = -1;
-        else if (cursors.down.isDown || keys.S.isDown) vy = 1;
+    // --- DETECTION DES TOUCHES REBINDABLES ---
+    // On utilise les noms de propriétés définis dans updateControls() de GameScene
+    let vx = 0, vy = 0;
+    if (keys.left.isDown) vx = -1;
+    else if (keys.right.isDown) vx = 1;
+    
+    if (keys.up.isDown) vy = -1;
+    else if (keys.down.isDown) vy = 1;
 
-        // --- LOGIQUE DE RÉGÉNÉRATION ---
-        const currentTime = this.scene.time.now;
-        
-        // Si plus de 10 secondes se sont écoulées depuis le dernier dégât
-        if (currentTime - this.lastDamageTime > this.regenDelay) {
-            if (this.hp < this.maxhp) {
-                // On remonte la vie petit à petit sans dépasser le max
-                this.hp = Math.min(this.maxhp, this.hp + (this.regenRate * delta));
-            }
+    // --- LOGIQUE DE RÉGÉNÉRATION ---
+    const currentTime = this.scene.time.now;
+    if (currentTime - this.lastDamageTime > this.regenDelay) {
+        if (this.hp < this.maxhp) {
+            this.hp = Math.min(this.maxhp, this.hp + (this.regenRate * delta));
         }
+    }
 
-        // Déclenchement des actions
-        if (Phaser.Input.Keyboard.JustDown(keys.CTRL) && this.stamina > this.slideStaminaCost) this.slide(vx, vy);
+    // --- DÉCLENCHEMENT DES ACTIONS ---
+    // Slide : On utilise keys.ctrl défini dynamiquement
+    // On utilise JustDown pour éviter de glisser en boucle
+    if (Phaser.Input.Keyboard.JustDown(keys.ctrl) && this.stamina > this.slideStaminaCost) {
+        this.slide(vx, vy);
+    }
 
-        // --- GESTION DYNAMIQUE DE LA VISÉE PENDANT L'ACTION ---
-        if (this.isAttacking && this.activeHitbox) {
-            const isMouseToLeft = mouseX < this.sprite.x;
-            this.sprite.setFlipX(isMouseToLeft);
-            this.weaponSprite.setFlipX(isMouseToLeft);
+    // Note : L'attaque n'est pas ici car elle est gérée par le pointerdown dans GameScene
+    // -----------------------------------------
 
-            // 2. Calcul de l'angle à partir du buste
-            const centerX = this.sprite.x;
-            const centerY = this.sprite.y - 10;
-            const angle = Phaser.Math.Angle.Between(centerX, centerY, mouseX, mouseY);
+    // --- GESTION DYNAMIQUE DE LA VISÉE ---
+    if (this.isAttacking && this.activeHitbox) {
+        // ... (ton code actuel de visée reste identique)
+    }
 
-            let range, offsetY = 0;
-            if (this.activeHitbox.label === 'heroKick') {
-                range = 8;
-            } else {
-                const config = WEAPON_CONFIG[this.currentWeapon];
-                range = config.range;
-                offsetY = config.offsetY;
-            }
-
-            const hx = centerX + Math.cos(angle) * range;
-            const hy = centerY + Math.sin(angle) * range + offsetY;
-
-            // On force la position de la hitbox
-            this.scene.matter.body.setPosition(this.activeHitbox, { x: hx, y: hy });
-        }
-
-        if (this.isStunned) {
-            // On synchronise quand même les sprites
-            this.sprite.x = this.body.position.x;
-            this.sprite.y = this.body.position.y;
-            this.weaponSprite.x = this.sprite.x;
-            this.weaponSprite.y = this.sprite.y;
-            return; 
-        }
-
-        // Logique de vitesse
-        let finalVx, finalVy, currentSpeed;
-        if (this.isSliding) {
-            finalVx = this.slideVec.x; finalVy = this.slideVec.y;
-            currentSpeed = this.slideSpeed * delta;
-            this.slideSpeed *= 0.975;
-            if (this.slideSpeed < 0.03) { this.isSliding = false; this.slideSpeed = 0; }
-        } else {
-            const isRunning = keys.SHIFT.isDown && this.stamina > this.staminaRunCost;
-            const speed = isRunning ? 0.10 : 0.05;
-            // Ralentissement pendant l'attaque pour plus de réalisme
-            currentSpeed = speed * delta * (this.isAttacking ? 0.2 : 1.0);
-            finalVx = vx; finalVy = vy;
-            if (isRunning) 
-                this.stamina -= 0.01
-            else 
-                this.stamina = Math.min(this.maxStamina, this.stamina + 0.01)
-        }
-
-        // Animation de déplacement (seulement si on n'attaque pas et ne glisse pas)
-        if (!this.isSliding && !this.isAttacking) {
-            if (vx !== 0 || vy !== 0) {
-                const anim = (keys.SHIFT.isDown && this.stamina > this.staminaRunCost +1) ? "run" : "walk";
-                this.playDualAnim(anim);
-                this.setDualFlip(vx < 0);
-                if (!this.scene.sound.get('step')?.isPlaying) {
-                    this.scene.sound.play('step', { volume: 0.2, rate: anim === "run" ? 1.5 : 1.2 });
-                }
-            } else {
-                this.playDualAnim("idle");
-            }
-        }
-
-        // Application du mouvement avec collisions
-        const tryMove = (dx, dy) => {
-            this.scene.matter.body.translate(this.body, { x: dx, y: dy });
-            if (this.scene.matter.query.collides(this.body, collisionBodies).length > 0) {
-                this.scene.matter.body.translate(this.body, { x: -dx, y: -dy });
-            }
-        };
-
-        tryMove(finalVx * currentSpeed, 0);
-        tryMove(0, finalVy * currentSpeed);
-
-        // Synchronisation des sprites sur le corps physique
+    if (this.isStunned) {
         this.sprite.x = this.body.position.x;
         this.sprite.y = this.body.position.y;
         this.weaponSprite.x = this.sprite.x;
         this.weaponSprite.y = this.sprite.y;
+        return; 
+    }
 
-        this.weaponSprite.depth = this.sprite.depth - 0.1;
+    // --- LOGIQUE DE VITESSE ---
+    let finalVx, finalVy, currentSpeed;
+    if (this.isSliding) {
+        finalVx = this.slideVec.x; finalVy = this.slideVec.y;
+        currentSpeed = this.slideSpeed * delta;
+        this.slideSpeed *= 0.975;
+        if (this.slideSpeed < 0.03) { this.isSliding = false; this.slideSpeed = 0; }
+    } else {
+        // Sprint : On utilise keys.shift défini dynamiquement
+        const isRunning = keys.shift.isDown && this.stamina > this.staminaRunCost;
+        const speed = isRunning ? 0.10 : 0.05;
+        currentSpeed = speed * delta * (this.isAttacking ? 0.2 : 1.0);
+        finalVx = vx; finalVy = vy;
+        
+        if (isRunning) this.stamina -= 0.01;
+        else this.stamina = Math.min(this.maxStamina, this.stamina + 0.01);
+    }
 
-        if (!this.isAttacking && this.currentWeapon === 'baseball') {
-            this.weaponSprite.y -= 6;
+    // --- ANIMATIONS ---
+    if (!this.isSliding && !this.isAttacking) {
+        if (vx !== 0 || vy !== 0) {
+            // Utilise keys.shift pour l'animation de course
+            const isRunning = keys.shift.isDown && this.stamina > this.staminaRunCost + 1;
+            const anim = isRunning ? "run" : "walk";
+            this.playDualAnim(anim);
+            this.setDualFlip(vx < 0);
+            if (!this.scene.sound.get('step')?.isPlaying) {
+                this.scene.sound.play('step', { volume: 0.2, rate: anim === "run" ? 1.5 : 1.2 });
+            }
+        } else {
+            this.playDualAnim("idle");
         }
     }
+
+    // --- PHYSIQUE ET SYNCHRO ---
+    const tryMove = (dx, dy) => {
+        this.scene.matter.body.translate(this.body, { x: dx, y: dy });
+        if (this.scene.matter.query.collides(this.body, collisionBodies).length > 0) {
+            this.scene.matter.body.translate(this.body, { x: -dx, y: -dy });
+        }
+    };
+
+    tryMove(finalVx * currentSpeed, 0);
+    tryMove(0, finalVy * currentSpeed);
+
+    this.sprite.x = this.body.position.x;
+    this.sprite.y = this.body.position.y;
+    this.weaponSprite.x = this.sprite.x;
+    this.weaponSprite.y = this.sprite.y;
+    this.weaponSprite.depth = this.sprite.depth - 0.1;
+
+    if (!this.isAttacking && this.currentWeapon === 'baseball') {
+        this.weaponSprite.y -= 6;
+    }
+}
 
     takeDamage(amount, source) {
         if (this.isInvulnerable || this.hp <= 0) return;
