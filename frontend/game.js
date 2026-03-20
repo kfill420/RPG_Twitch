@@ -12,6 +12,8 @@ import UIScene from "./scenes/UIScene.js";
 import DeathScene from "./scenes/deathScene.js";
 import { networkManager } from "./services/NetworkManager.js";
 
+let webSocketEnable = false;
+
 // Configuration du jeu
 const config = {
   type: Phaser.AUTO,
@@ -37,6 +39,6 @@ const config = {
 
 const game = new Phaser.Game(config);
 
-networkManager.init(game);
+if (webSocketEnable) networkManager.init(game);
 
 export default game;
