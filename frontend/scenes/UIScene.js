@@ -1,141 +1,169 @@
+/**
+ * @class UIScene
+ * @description Gère l'affichage tête haute (HUD) : Barres de vie, stamina et inventaire.
+ */
+
 export default class UIScene extends Phaser.Scene {
     constructor() {
         super({ key: 'UIScene' });
+        
+        // Data
         this.maxSlots = 3;
         this.selectedSlot = 0;
-        this.inventory = ['baseball', '', '']; // Stocke les clés d'items
+        this.inventory = ['baseball', '', ''];
 
-        // Valeurs pour le lissage (interpolation)
+        // Lissage
         this.targetData = { hp: 10, maxHp: 10, stamina: 10, maxStamina: 10 };
         this.visualHp = 10;
         this.visualStamina = 10;
+        
+        // Références d'objets
+        this.slots = [];
+        this.icons = [];
     }
 
     create() {
-        // Textes fixes
-        this.add.text(10, 10, 'HP', { fontSize: '12px', fill: '#fff', fontStyle: 'bold' });
-        this.add.text(10, 30, 'ST', { fontSize: '12px', fill: '#fff', fontStyle: 'bold' });
+        const { width, height } = this.scale;
 
-        this.hpBar = this.add.graphics();
-        this.staminaBar = this.add.graphics();
+        // 1. BARRES DE STATUTS
+        this._setupStatusBars();
 
-        // Inventaire
-        this.inventoryContainer = this.add.container(this.cameras.main.width / 2, this.cameras.main.height - 40);
+        // 2. INVENTAIRE
+        this.inventoryContainer = this.add.container(width / 2, height - 50);
+        this.selectionVisual = this.add.graphics();
+        this.inventoryContainer.add(this.selectionVisual);
+        
         this.drawInventory();
 
-        // Events
+        // 3. ÉVÉNEMENTS
         const gameScene = this.scene.get('GameScene');
         if (gameScene) {
             gameScene.events.on('updateUI', (data) => { 
                 this.targetData = data; 
-            }, 
-            this);
+            }, this);
         }
-        
 
-        // Changement de slot (Molette)
+        // 4. INPUTS
+        this._setupInputs(gameScene);
+    }
+
+    _setupStatusBars() {
+        const bg = this.add.graphics();
+        bg.fillStyle(0x000000, 0.5);
+        bg.fillRoundedRect(40, 10, 205, 12, 4);
+        bg.fillRoundedRect(40, 30, 205, 12, 4);
+
+        this.add.text(10, 10, 'HP', { fontSize: '20px', fill: '#fff', fontStyle: 'bold' });
+        this.add.text(10, 30, 'ST', { fontSize: '20px', fill: '#fff', fontStyle: 'bold' });
+
+        this.hpBar = this.add.graphics();
+        this.staminaBar = this.add.graphics();
+    }
+
+    _setupInputs(gameScene) {
+        // Molette
         this.input.on('wheel', (pointer, gameObjects, dx, dy) => {
-            if (dy > 0) {
-                this.selectedSlot = (this.selectedSlot + 1) % this.maxSlots;
-            } else {
-                this.selectedSlot = (this.selectedSlot - 1 + this.maxSlots) % this.maxSlots;
-            }
-            this.drawInventory();
-            // On informe le joueur du changement d'arme
-            gameScene.player.changeWeapon(this.inventory[this.selectedSlot]);
+            const direction = dy > 0 ? 1 : -1;
+            this.changeSelectedSlot(this.selectedSlot + direction, gameScene);
         });
+
+        // Touches 1, 2, 3
+        this.input.keyboard.on('keydown-ONE', () => this.changeSelectedSlot(0, gameScene));
+        this.input.keyboard.on('keydown-TWO', () => this.changeSelectedSlot(1, gameScene));
+        this.input.keyboard.on('keydown-THREE', () => this.changeSelectedSlot(2, gameScene));
+    }
+
+    changeSelectedSlot(newIndex, gameScene) {
+        this.selectedSlot = (newIndex + this.maxSlots) % this.maxSlots;
+        
+        this._updateSelectionHighlight();
+        
+        if (gameScene?.player) {
+            gameScene.player.changeWeapon(this.inventory[this.selectedSlot]);
+        }
     }
 
     drawInventory() {
-        this.inventoryContainer.removeAll(true); // Le "true" détruit proprement les anciens objets
+        this.inventoryContainer.iterate(child => {
+            if (child !== this.selectionVisual) child.destroy();
+        });
+        this.slots = [];
+        this.icons = [];
+
         const slotSize = 64;
-        const spacing = 16;
-        const totalWidth = (this.maxSlots * slotSize) + ((this.maxSlots - 1) * spacing);
-        const startX = -totalWidth / 2;
+        const spacing = 12;
+        const startX = -((this.maxSlots * (slotSize + spacing)) - spacing) / 2;
 
         for (let i = 0; i < this.maxSlots; i++) {
-            const x = startX + (i * (slotSize + spacing)) + (slotSize / 2);
+            const x = startX + (i * (slotSize + spacing)) + slotSize / 2;
 
-            // 1. UTILISER make.rectangle au lieu de add.rectangle
-            // Cela crée l'objet sans l'afficher immédiatement en haut à gauche
-            const isSelected = (i === this.selectedSlot);
-            const bg = this.make.graphics();
-
-            // Dessin du fond et de la bordure
-            bg.fillStyle(0x000000, 0.5);
-            bg.fillRect(x - slotSize / 2, -slotSize / 2, slotSize, slotSize);
-
-            bg.lineStyle(isSelected ? 3 : 2, isSelected ? 0xffff00 : 0xffffff, 0.8);
-            bg.strokeRect(x - slotSize / 2, -slotSize / 2, slotSize, slotSize);
-
+            // Slot Background
+            const bg = this.add.graphics();
+            bg.fillStyle(0x222222, 0.8);
+            bg.fillRoundedRect(x - slotSize / 2, -slotSize / 2, slotSize, slotSize, 8);
+            bg.lineStyle(2, 0xffffff, 0.3);
+            bg.strokeRoundedRect(x - slotSize / 2, -slotSize / 2, slotSize, slotSize, 8);
+            
             this.inventoryContainer.add(bg);
 
-            // Icône de l'item
+            // Item Icon
             const itemKey = this.inventory[i];
             if (itemKey && itemKey !== '') {
-                // Scale très petit (0.02 ou 0.03) car tes assets originaux sont énormes
-                // On utilise make.image pour éviter la duplication en haut à gauche
                 const icon = this.make.image({
-                    x: x,
+                    x: x, 
                     y: 0,
                     key: `${itemKey}-attacking-0`
                 });
 
-                icon.setScale(0.14); // Ajuste cette valeur selon tes assets
-                icon.setOrigin(0.57, 0.4); // Centre parfaitement l'image
-
+                icon.setScale(0.16); 
+                icon.setOrigin(0.57, 0.42); 
                 this.inventoryContainer.add(icon);
             }
         }
+        this._updateSelectionHighlight();
+    }
+
+    _updateSelectionHighlight() {
+        const slotSize = 64;
+        const spacing = 12;
+        const startX = -((this.maxSlots * (slotSize + spacing)) - spacing) / 2;
+        const x = startX + (this.selectedSlot * (slotSize + spacing)) + slotSize / 2;
+
+        this.selectionVisual.clear();
+        this.selectionVisual.lineStyle(4, 0x00ffff, 1);
+        this.selectionVisual.strokeRoundedRect(x - slotSize / 2, -slotSize / 2, slotSize, slotSize, 8);
+        
+        // Effet pulse sur la sélection
+        this.tweens.add({
+            targets: this.selectionVisual,
+            alpha: { start: 1, to: 0.6 },
+            duration: 500,
+            yoyo: true,
+            repeat: -1
+        });
     }
 
     update(time, delta) {
-        // Interpolation linéaire (Lerp) pour l'effet fluide
-        const lerpFactor = 0.1;
+        // Lerp factor ajusté par delta pour être indépendant des FPS
+        const lerpFactor = 0.01 * delta; 
         this.visualHp = Phaser.Math.Linear(this.visualHp, this.targetData.hp, lerpFactor);
         this.visualStamina = Phaser.Math.Linear(this.visualStamina, this.targetData.stamina, lerpFactor);
 
-        const startX = 40;
+        this._renderBars();
+    }
 
-        // Dessin HP
+    _renderBars() {
+        const startX = 42;
+        const barWidth = 200;
+
+        // Draw HP
         this.hpBar.clear();
-        this.hpBar.fillStyle(0xff0000, 1);
-        this.hpBar.fillRect(startX, 12, (this.visualHp / this.targetData.maxHp) * 100, 8);
+        this.hpBar.fillStyle(0xff4444, 1);
+        this.hpBar.fillRoundedRect(startX, 12, (this.visualHp / this.targetData.maxHp) * barWidth, 8, 2);
 
-        // Dessin Stamina
+        // Draw Stamina
         this.staminaBar.clear();
-        this.staminaBar.fillStyle(0x00ff00, 1);
-        this.staminaBar.fillRect(startX, 32, (this.visualStamina / this.targetData.maxStamina) * 100, 8);
-    }
-
-    upgradeInventory(amount) {
-        this.maxSlots += amount;
-        
-        // On ajoute des slots vides au tableau pour correspondre à maxSlots
-        while (this.inventory.length < this.maxSlots) {
-            this.inventory.push(''); 
-        }
-
-        // On redessine tout (les slots s'aligneront automatiquement grâce à ta logique startX)
-        this.drawInventory();
-    }
-
-    addItem(weaponKey) {
-       // 1. Trouver le premier slot vide
-       const emptySlot = this.inventory.indexOf('');
-       
-       if (emptySlot !== -1) {
-           this.inventory[emptySlot] = weaponKey;
-           this.drawInventory();
-           
-           // 2. Si l'objet est ramassé dans le slot actuellement sélectionné, 
-           // on équipe le joueur immédiatement
-           if (emptySlot === this.selectedSlot) {
-               const gameScene = this.scene.get('GameScene');
-               gameScene.player.changeWeapon(weaponKey);
-           }
-           return true; // Succès
-       }
-       return false; // Inventaire plein
+        this.staminaBar.fillStyle(0x44ff44, 1);
+        this.staminaBar.fillRoundedRect(startX, 32, (this.visualStamina / this.targetData.maxStamina) * barWidth, 8, 2);
     }
 }

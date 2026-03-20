@@ -1,3 +1,8 @@
+/**
+ * @class SettingsScene
+ * @description Gère l'interface des réglages (Volume et Remapping des touches).
+ * Cette scène est généralement lancée en mode "Overlay" par-dessus la GameScene.
+ */
 export default class SettingsScene extends Phaser.Scene {
     constructor() {
         super({ key: 'SettingsScene' });
@@ -6,137 +11,152 @@ export default class SettingsScene extends Phaser.Scene {
     create() {
         const { width, height } = this.scale;
 
-        // --- RÉCUPÉRATION DU VOLUME SAUVEGARDÉ ---
+        // --- 1. PERSISTANCE ET INITIALISATION ---
         const savedVolume = localStorage.getItem('game_volume');
         if (savedVolume !== null) {
             this.sound.volume = parseFloat(savedVolume);
         }
-        
-        const blocker = this.add.rectangle(0, 0, width, height, 0x000000, 0.99)
-            .setOrigin(0)
-            .setInteractive(); 
 
-        // On s'assure que cette scène est tout en haut (Z-index élevé)
+        // --- 2. INTERFACE DE FOND (BLOCKER) ---
+        this.add.rectangle(0, 0, width, height, 0x000000, 0.9)
+            .setOrigin(0)
+            .setInteractive();
+
         this.scene.bringToTop();
 
+        // Titre principal
         this.add.text(width / 2, 50, 'RÉGLAGES', { 
             fontSize: '32px', 
             fontFamily: 'Arial Black',
             fill: '#ffffff' 
         }).setOrigin(0.5);
 
-        // --- 2. SECTION VOLUME (Version Slider) ---
-        const volY = 135;
+        // --- 3. SECTION VOLUME (SLIDER) ---
+        this.createVolumeSlider(width, 135);
+
+        // --- 4. SECTION CONTRÔLES (KEYBINDING) ---
+        this.createKeybindingMenu(width, 250);
+
+        // --- 5. BOUTONS DE NAVIGATION ---
+        this.createNavigationButtons(width, height);
+    }
+
+    // Crée le curseur de réglage du volume
+    createVolumeSlider(width, y) {
         const sliderWidth = 200;
         const sliderHeight = 10;
+        
+        const volLabel = this.add.text(width / 2, y - 30, 
+            `VOLUME : ${Math.round(this.sound.volume * 100)}%`, 
+            { fontSize: '20px' }
+        ).setOrigin(0.5);
             
-        // Label du volume
-        const volLabel = this.add.text(width / 2, volY - 30, `VOLUME : ${Math.round(this.sound.volume * 100)}%`, { fontSize: '20px' }).setOrigin(0.5);
+        // Barre grise (le rail)
+        this.add.rectangle(width / 2, y, sliderWidth, sliderHeight, 0x333333).setOrigin(0.5);
             
-        // Fond de la barre de réglage
-        const track = this.add.rectangle(width / 2, volY, sliderWidth, sliderHeight, 0x333333).setOrigin(0.5);
-            
-        // Le curseur (bouton mobile)
-        // On calcule sa position X initiale en fonction du volume actuel
-        let initialCursorX = (width / 2 - sliderWidth / 2) + (this.sound.volume * sliderWidth);
-        const cursor = this.add.rectangle(initialCursorX, volY, 20, 30, 0x00ffff)
+        // Position initiale du curseur basée sur le volume actuel
+        let initialX = (width / 2 - sliderWidth / 2) + (this.sound.volume * sliderWidth);
+        
+        const cursor = this.add.rectangle(initialX, y, 20, 30, 0x00ffff)
             .setInteractive({ useHandCursor: true, draggable: true });
-            
-        // --- LOGIQUE DE DRAG & DROP ---
-        this.input.setDraggable(cursor);
-            
+
+        // Logique de glissement
         this.input.on('drag', (pointer, gameObject, dragX) => {
-            // On limite le mouvement aux bornes de la barre
             const minX = width / 2 - sliderWidth / 2;
             const maxX = width / 2 + sliderWidth / 2;
             
-            if (dragX >= minX && dragX <= maxX) {
-                gameObject.x = dragX;
-                
-                // Calcul du volume (entre 0 et 1)
-                const newVolume = (dragX - minX) / sliderWidth;
-                this.sound.volume = newVolume;
-                
-                // Mise à jour visuelle et sauvegarde
-                volLabel.setText(`VOLUME : ${Math.round(newVolume * 100)}%`);
-                localStorage.setItem('game_volume', newVolume);
-            }
+            // On contraint le curseur entre min et max
+            let finalX = Phaser.Math.Clamp(dragX, minX, maxX);
+            gameObject.x = finalX;
+            
+            // Conversion de la position X en valeur 0 à 1
+            const newVolume = (finalX - minX) / sliderWidth;
+            this.sound.volume = newVolume;
+            
+            // Mise à jour visuelle et stockage
+            volLabel.setText(`VOLUME : ${Math.round(newVolume * 100)}%`);
+            localStorage.setItem('game_volume', newVolume);
         });
-        // --- 3. SECTION TOUCHES (Mouvements + Actions) ---
-        // On définit la liste des touches à gérer
+    }
+
+    // Crée la liste interactive pour changer les touches du clavier
+    createKeybindingMenu(width, startY) {
         const controls = [
-            { label: 'HAUT',    id: 'key_up',     default: 'Z' },
-            { label: 'BAS',     id: 'key_down',   default: 'S' },
-            { label: 'GAUCHE',  id: 'key_left',   default: 'Q' },
-            { label: 'DROITE',  id: 'key_right',  default: 'D' },
-            { label: 'SPRINT',  id: 'key_shift',  default: 'SHIFT' },
-            { label: 'SLIDE',  id: 'key_ctrl',  default: 'CTRL' }
+            { label: 'HAUT',    id: 'key_up',    default: 'Z' },
+            { label: 'BAS',     id: 'key_down',  default: 'S' },
+            { label: 'GAUCHE',  id: 'key_left',  default: 'Q' },
+            { label: 'DROITE',  id: 'key_right', default: 'D' },
+            { label: 'SPRINT',  id: 'key_shift', default: 'SHIFT' },
+            { label: 'SLIDE',   id: 'key_ctrl',  default: 'CTRL' }
         ];
 
-        const startY = 250;
         const spacing = 45;
 
         controls.forEach((control, index) => {
             const y = startY + (index * spacing);
             const currentKey = localStorage.getItem(control.id) || control.default;
 
-            // Texte de l'action
             this.add.text(width / 2 - 120, y, control.label, { fontSize: '18px' }).setOrigin(0, 0.5);
 
-            // Bouton pour changer
             const keyBtn = this.add.text(width / 2 + 50, y, `[ ${currentKey} ]`, { 
-                fontSize: '18px', 
-                fill: '#0ff',
-                backgroundColor: '#111',
-                padding: { x: 5, y: 2 }
+                fontSize: '18px', fill: '#0ff', backgroundColor: '#111', padding: { x: 5, y: 2 }
             }).setOrigin(0, 0.5).setInteractive({ useHandCursor: true });
 
             keyBtn.on('pointerdown', () => {
                 keyBtn.setText('[ APPUYEZ ]').setStyle({ fill: '#ff0' });
                 
-                // On attend la prochaine touche pressée une seule fois
                 this.input.keyboard.once('keydown', (event) => {
                     let newKey = event.key.toUpperCase();
 
-                    // Correction pour la touche Espace qui renvoie souvent " "
-                    if (newKey === " ") newKey = "SPACE";
-                    if (newKey === "CONTROL") newKey = "CTRL";
-                    if (newKey === "ARROWUP") newKey = "UP";
-                    if (newKey === "ARROWDOWN") newKey = "DOWN";
-                    if (newKey === "ARROWLEFT") newKey = "LEFT";
-                    if (newKey === "ARROWRIGHT") newKey = "RIGHT";
+                    const replacements = {
+                        " ": "SPACE",
+                        "CONTROL": "CTRL",
+                        "ESCAPE": "ESC",
+                        "ARROWUP": "UP",
+                        "ARROWDOWN": "DOWN",
+                        "ARROWLEFT": "LEFT",
+                        "ARROWRIGHT": "RIGHT"
+                    };
+                    
+                    if (replacements[newKey]) newKey = replacements[newKey];
                     
                     localStorage.setItem(control.id, newKey);
                     keyBtn.setText(`[ ${newKey} ]`).setStyle({ fill: '#0ff' });
                     
-                    // Optionnel : émettre un événement pour prévenir la GameScene immédiatement
                     this.events.emit('keyChanged');
                 });
             });
         });
+    }
 
-        // --- 4. BOUTON RETOUR AU JEU ---
-        const btnBack = this.add.text((width / 2) -140, height - 60, 'RETOUR AU JEU', { 
+    // Boutons Retour et Quitter
+    createNavigationButtons(width, height) {
+        // Bouton Retour : Ferme simplement cette scène
+        const btnBack = this.add.text((width / 2) - 140, height - 60, 'RETOUR AU JEU', { 
             fontSize: '24px', backgroundColor: '#1e1e82', padding: { x: 20, y: 10 } 
         }).setOrigin(0.5).setInteractive({ useHandCursor: true });
 
-        btnBack.on('pointerdown', () => {
-            this.scene.stop();
-        });
+        btnBack.on('pointerdown', () => this.scene.stop());
 
-        // --- 4. BOUTON RETOUR AU MENUE ---
+        // Bouton Quitter
         const btnQuit = this.add.text((width / 2) + 140, height - 60, 'RETOUR AU MENU', { 
             fontSize: '24px', backgroundColor: '#821e1e', padding: { x: 20, y: 10 }
         }).setOrigin(0.5).setInteractive({ useHandCursor: true });
 
         btnQuit.on('pointerdown', () => {
-            if (this.scene.isActive('GameScene'))
-                this.scene.stop('GameScene');
-            if (this.scene.isActive('UIScene'))
-                this.scene.stop('UIScene');
-            this.time.delayedCall(10, () => {
-                this.scene.start('MenuScene');
+            // Nettoyage complet des scènes actives
+            const scenesToStop = ['GameScene', 'UIScene', 'SettingsScene'];
+            scenesToStop.forEach(s => {
+                if (this.scene.isActive(s)) this.scene.stop(s);
             });
+            
+            this.scene.start('MenuScene');
+        });
+
+        // Effets hover
+        [btnBack, btnQuit].forEach(btn => {
+            btn.on('pointerover', () => btn.setAlpha(0.8));
+            btn.on('pointerout', () => btn.setAlpha(1));
         });
     }
 }

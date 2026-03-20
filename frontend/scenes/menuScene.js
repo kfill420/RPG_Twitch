@@ -1,49 +1,58 @@
+/**
+ * @class MenuScene
+ * @description Écran d'accueil du jeu. Gère la navigation principale, 
+ */
+
+import MenuButton from "../components/ui/MenuButton.js";
+
 export default class MenuScene extends Phaser.Scene {
     constructor() {
         super({ key: 'MenuScene' });
     }
 
     preload() {
-        // IMPORTANT : Le menu a besoin de ses propres assets ou de ceux du jeu
-        // On charge juste une frame pour les particules
+        // Particules
         this.load.image('particle', './assets/character/forest_ranger/3/idle/0_Forest_Ranger_Idle_000.png');
     }
 
     create() {
         const { width, height } = this.scale;
 
-        // On vérifie si l'user est desktop
-        const isMobile = !this.sys.game.device.os.desktop;
+        // 1. Initialisation de l'environnement
+        this._applyGlobalVolume();
+        this._setupBackground(width, height);
+        this._setupParticles(width, height);
 
-        // Dans MenuScene.js ou BootScene.js
-        const savedVolume = localStorage.getItem('game_volume');
-        if (savedVolume !== null) {
-            this.sound.volume = parseFloat(savedVolume);
+        // 2. Vérification de la plateforme
+        if (!this.sys.game.device.os.desktop) {
+            return this._showMobileWarning(width, height);
         }
 
-        // --- 1. LE DÉGRADÉ (Méthode Canvas pour éviter les paliers) ---
-        let canvasTexture = this.textures.get('menuGradient');
+        // 3. Construction de l'interface
+        this._createUI(width, height);
 
-        // Si la texture n'existe pas, on la crée (évite les erreurs au redémarrage)
-        if (canvasTexture.key === '__MISSING') {
-            canvasTexture = this.textures.createCanvas('menuGradient', width, height);
+        // 4. Gestion du redimensionnement (Crucial pour le web)
+        this.scale.on('resize', this._onResize, this);
+    }
+
+
+    _setupBackground(width, height) {
+        // Création d'une texture dégradée
+        if (!this.textures.exists('menuGradient')) {
+            const canvas = this.textures.createCanvas('menuGradient', width, height);
+            const ctx = canvas.getContext();
+            const grd = ctx.createLinearGradient(0, 0, 0, height);
+            grd.addColorStop(0, '#050505');
+            grd.addColorStop(1, '#1a1a55');
+            ctx.fillStyle = grd;
+            ctx.fillRect(0, 0, width, height);
+            canvas.refresh();
         }
+        this.bgImage = this.add.image(0, 0, 'menuGradient').setOrigin(0);
+    }
 
-        const ctx = canvasTexture.getContext();
-        const grd = ctx.createLinearGradient(0, 0, 0, height); // Vertical
-        
-        // On utilise des couleurs un peu plus espacées pour casser l'effet de paliers
-        grd.addColorStop(0, '#050505'); 
-        grd.addColorStop(1, '#1a1a55'); 
-        
-        ctx.fillStyle = grd;
-        ctx.fillRect(0, 0, width, height);
-        canvasTexture.refresh();
-        
-        this.add.image(0, 0, 'menuGradient').setOrigin(0);
-
-        // --- 2. LES PARTICULES (Avec la bonne clé d'image) ---
-        this.add.particles(0, 0, 'particle', {
+    _setupParticles(width, height) {
+        this.particles = this.add.particles(0, 0, 'particle', {
             x: { min: 0, max: width },
             y: { min: 0, max: height },
             lifespan: 4000,
@@ -53,17 +62,11 @@ export default class MenuScene extends Phaser.Scene {
             frequency: 150,
             blendMode: 'ADD'
         });
-        
-        // Si on est sur mobile, on affiche le message et on arrête là
-        if (isMobile) {
-            this.showMobileWarning(width, height);
-            return; // Empêche la création du titre et des boutons cliquables
-        }
+    }
 
-        
-
-        // --- 3. TITRE ET BOUTONS ---
-        this.add.text(width / 2, height * 0.2, 'MY STREAMER NEEDS HELP', {
+    _createUI(width, height) {
+        // Titre
+        this.titleText = this.add.text(width / 2, height * 0.2, 'MY STREAMER NEEDS HELP', {
             fontSize: '42px',
             fontFamily: 'Arial Black',
             fill: '#ffffff',
@@ -71,116 +74,54 @@ export default class MenuScene extends Phaser.Scene {
             strokeThickness: 8
         }).setOrigin(0.5);
 
-        this.createButton(width / 2, height * 0.5, 'MODE SOLO', false, () => {
+        this.btnSolo = new MenuButton(this, width / 2, height * 0.5, 'MODE SOLO', false, () => {
             this.scene.start('PreloadScene', { mode: 'solo' });
         });
 
-        this.createButton(width / 2, height * 0.62, 'MODE MULTIPLAYER (SOON)', true, () => {
+        this.btnMulti = new MenuButton(this, width / 2, height * 0.62, 'MULTIPLAYER (SOON)', true, () => {
             this.cameras.main.shake(200, 0.005);
         });
 
-        this.createButton(width / 2, height * 0.74, 'RÉGLAGES', false, () => {
-            // On lance la scène de réglages par dessus sans arrêter la scène actuelle
+        this.btnSettings = new MenuButton(this, width / 2, height * 0.74, 'RÉGLAGES', false, () => {
             this.scene.launch('SettingsScene', { origin: this.scene.key });
         });
     }
 
-    createButton(x, y, label, isLocked, callback) {
-    const width = 400;
-    const height = 60;
-    const borderRadius = 20;
+    /**
+     * @method createButton
+     * @description Génère un bouton interactif stylisé avec feedback visuel.
+     */
 
-    // 1. Couleurs selon l'état
-    const colorNormal = 0x1e1e82; // Bleu profond
-    const colorHover = 0x3d3dbd;  // Bleu plus clair au survol
-    const colorLocked = 0x222222; // Gris sombre
-    const strokeColor = isLocked ? 0x444444 : 0x00ffff; // Bordure cyan ou grise
-
-    // 2. Création du Container
-    const container = this.add.container(x, y);
-
-    // 3. Le fond arrondi (Graphics)
-    const bg = this.add.graphics();
-    const drawBg = (color) => {
-        bg.clear();
-        bg.fillStyle(color, 0.8);
-        bg.fillRoundedRect(-width / 2, -height / 2, width, height, borderRadius);
-        bg.lineStyle(1, strokeColor, 1);
-        bg.strokeRoundedRect(-width / 2, -height / 2, width, height, borderRadius);
-    };
-    drawBg(isLocked ? colorLocked : colorNormal);
-
-    // 4. Le Texte
-    const btnText = this.add.text(0, 0, label, {
-        fontSize: '48px',
-        fontFamily: 'Arial Black',
-        fill: isLocked ? '#666' : '#fff',
-    }).setOrigin(0.5).setScale(0.5);
-
-    container.add([bg, btnText]);
-
-    // 5. Interactivité
-    if (!isLocked) {
-        // Zone d'interaction (on définit un rectangle de la taille du bouton)
-        container.setInteractive(new Phaser.Geom.Rectangle(-width / 2, -height / 2, width, height), Phaser.Geom.Rectangle.Contains);
-        container.cursor = 'pointer';
-
-        container.on('pointerover', () => {
-            drawBg(colorHover);
-            this.tweens.add({ targets: container, scale: 1.05, duration: 100 });
-            btnText.setStyle({ fill: '#ff0' }); // Jaune au survol
-        });
-
-        container.on('pointerout', () => {
-            drawBg(colorNormal);
-            this.tweens.add({ targets: container, scale: 1.0, duration: 100 });
-            btnText.setStyle({ fill: '#fff' });
-        });
-
-        container.on('pointerdown', () => {
-            this.tweens.add({ targets: container, scale: 0.95, duration: 50, yoyo: true });
-            callback();
-        });
-    } else {
-        container.setAlpha(0.6);
-    }
-    return container;
+    _onResize(gameSize) {
+        const { width, height } = gameSize;
+        
+        // Repositionnement dynamique
+        this.bgImage.setDisplaySize(width, height);
+        this.titleText.setPosition(width / 2, height * 0.2);
+        this.btnSolo.setPosition(width / 2, height * 0.5);
+        this.btnMulti.setPosition(width / 2, height * 0.62);
+        this.btnSettings.setPosition(width / 2, height * 0.74);
+        
+        // Mise à jour de la zone d'émission des particules
+        if (this.particles) {
+            this.particles.setPosition(0, 0);
+        }
     }
 
-    showMobileWarning(width, height) {
-        // 1. Fond noir total pour bien masquer le menu
-        const overlay = this.add.graphics();
-        overlay.fillStyle(0x050505, 0.7);
-        overlay.fillRect(0, 0, width, height);
-        
-        // 2. Calcul d'une taille adaptative (fontSize basée sur la largeur)
-        // On utilise Math.min pour que le texte ne devienne pas géant sur tablette
-        const titleSize = Math.min(width * 0.1, 70); 
-        const descSize = Math.min(width * 0.05, 64);
-        
-        // 3. Texte d'erreur principal (TITRE)
-        const errorTitle = this.add.text(width / 2, height * 0.4, "ACCÈS REFUSÉ", {
-            fontSize: `${titleSize}px`,
+    _applyGlobalVolume() {
+        const savedVolume = localStorage.getItem('game_volume');
+        if (savedVolume !== null) {
+            this.sound.volume = parseFloat(savedVolume);
+        }
+    }
+
+    _showMobileWarning(width, height) {
+        const overlay = this.add.graphics().fillStyle(0x050505, 0.9).fillRect(0, 0, width, height);
+        this.add.text(width / 2, height / 2, "PC ONLY\nKEYBOARD & MOUSE REQUIRED", {
+            fontSize: '32px',
             fontFamily: 'Arial Black',
             fill: '#ff0000',
-            stroke: '#000000',
-            strokeThickness: 6
+            align: 'center'
         }).setOrigin(0.5);
-    
-        // 4. Texte descriptif (plus gros et avec des retours à la ligne forcés)
-        const errorDesc = this.add.text(width / 2, height * 0.6, 
-            "CE JEU NÉCESSITE\nUN CLAVIER ET UNE SOURIS.\n\nDISPONIBLE UNIQUEMENT\nSUR ORDINATEUR.", {
-            fontSize: `${descSize}px`,
-            fontFamily: 'Arial',
-            fill: '#ffffff',
-            align: 'center',
-            lineSpacing: 10,
-            wordWrap: { width: width * 0.8 } // Empêche le texte de sortir de l'écran
-        }).setOrigin(0.5);
-    
-        // 5. Petit effet visuel : l'icône "Attention" ou une bordure
-        const border = this.add.graphics();
-        border.lineStyle(6, 0xff0000, 0.5);
-        border.strokeRect(20, 20, width - 40, height - 40);
     }
 }

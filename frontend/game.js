@@ -1,21 +1,18 @@
+/**
+ * @file game.js
+ * @description Point d'entrée principal de l'application. 
+ * Configure l'instance Phaser et initialise les services globaux.
+ */
+
 import MenuScene from "./scenes/menuScene.js";
 import GameScene from "./scenes/gameScene.js";
 import PreloadScene from "./scenes/preloadScene.js";
 import SettingsScene from "./scenes/settingsScene.js";
 import UIScene from "./scenes/UIScene.js";
 import DeathScene from "./scenes/deathScene.js";
+import { networkManager } from "./services/NetworkManager.js";
 
-const socket = io("http://localhost:3001");
-
-socket.on("connect", () => {
-  console.log("[Game] Connecté au serveur WebSocket");
-});
-
-socket.on("user-action", (data) => {
-  console.log("[Game] Action reçue :", data);
-  window.gameScene?.handleAction(data.action);
-});
-
+// Configuration du jeu
 const config = {
   type: Phaser.AUTO,
   parent: "game-container",
@@ -26,7 +23,7 @@ const config = {
   physics: {
     default: "matter",
     matter: {
-      debug: true, 
+      debug: false, 
       gravity: { y: 0 }
     }
   },
@@ -38,4 +35,8 @@ const config = {
   scene: [MenuScene, PreloadScene, GameScene, UIScene, SettingsScene, DeathScene]
 };
 
-new Phaser.Game(config);
+const game = new Phaser.Game(config);
+
+networkManager.init(game);
+
+export default game;

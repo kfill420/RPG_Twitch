@@ -1,10 +1,16 @@
 import WEAPON_CONFIG from './WeaponConfig.js';
 
+/**
+ * @class Player
+ * @description Gère la physique Matter.js, les doubles animations (Héros + Arme), 
+ * le système de stamina et la gestion des dégâts/mort.
+ */
+
 export default class Player {
     constructor(scene, x, y) {
         this.scene = scene;
 
-        // --- PHYSIQUE ---
+        // --- 1. CONFIGURATION PHYSIQUE (Matter.js) ---
         this.body = scene.matter.add.circle(x, y + 10, 5, {
             isSensor: false,
             inertia: Infinity,
@@ -16,7 +22,7 @@ export default class Player {
             }
         });
 
-        // --- ÉTATS & STATS ---
+        // --- 2. ÉTATS & STATISTIQUES ---
         this.hp = 10;
         this.maxhp = 10;
         this.stamina = 10;
@@ -29,37 +35,48 @@ export default class Player {
         this.isDead = false;
         this.canSlide = true;
 
+        // Coûts en endurance
         this.staminaKickCost = 1;
         this.staminaRunCost = 1;
         this.staminaAttackCost = 2;
         this.slideStaminaCost = 2;
         
+        // Mouvement spécial
         this.slideSpeed = 0;
         this.slideVec = new Phaser.Math.Vector2();
         this.currentWeapon = 'baseball';
         
+        // Récupération
         this.lastDamageTime = 0;
-        this.regenRate = 0.0001;
-        this.regenDelay = 10000;
+        this.regenRate = 0.0001; // Régénération par milliseconde
+        this.regenDelay = 10000; // 10 secondes sans dégâts avant de regen
 
         this.activeHitbox = null;
+
+        // --- 3. INITIALISATION VISUELLE ---
         this.createSprite(x, y);
     }
 
+    /**
+     * Crée les sprites et génère les animations pour le héros et son arme
+     */
     createSprite(x, y) {
         // Sprite du Héros
         this.sprite = this.scene.add.sprite(x, y, "hero-idle-0").setScale(0.04);
         this.sprite.setOrigin(0.5, 0.8);
 
-        // Sprite de l'Arme
+        // Sprite de l'Arme (superposé)
         this.weaponSprite = this.scene.add.sprite(x, y, "").setScale(0.04);
         this.weaponSprite.setOrigin(0.5, 0.65);
         this.weaponSprite.setVisible(false);
 
         const anims = this.scene.anims;
 
+        /**
+         * Helper pour créer des animations synchronisées
+         */
         const createDoubleAnim = (key, length, rate, repeat = -1) => {
-            // Anim Héros
+            // Animation du Héros
             if (!anims.exists(key)) {
                 anims.create({
                     key: key,
@@ -69,10 +86,11 @@ export default class Player {
                 });
             }
         
-            // Anim Arme
+            // Animation de l'Arme
             if (this.currentWeapon && this.currentWeapon !== '') {
                 const weaponKey = `${this.currentWeapon}-${key}`;
                 let textureSuffix = key;
+                // Mapping des suffixes de textures pour correspondre au Preload
                 if (key === "attack") textureSuffix = "attacking";
                 if (key === "walk") textureSuffix = "walking";
                 if (key === "run") textureSuffix = "running";
@@ -92,6 +110,7 @@ export default class Player {
             }
         };
 
+        // Génération de la bibliothèque d'animations
         createDoubleAnim("idle", 18, 20);
         createDoubleAnim("walk", 24, 44);
         createDoubleAnim("run", 12, 24);
@@ -102,19 +121,22 @@ export default class Player {
         this.playDualAnim("idle");
     }
 
+    /**
+     * Boucle principale du joueur (mouvement, regen, sync visuelle)
+     */
     update(cursors, keys, delta, collisionBodies) {
         if (this.isDead) return;
 
         const pointer = this.scene.input.activePointer;
         pointer.updateWorldPoint(this.scene.cameras.main);
 
-        // --- 1. LOGIQUE DE RÉGÉNÉRATION ---
+        // --- 1. RÉGÉNÉRATION HP ---
         const currentTime = this.scene.time.now;
         if (currentTime - this.lastDamageTime > this.regenDelay && this.hp < this.maxhp) {
             this.hp = Math.min(this.maxhp, this.hp + (this.regenRate * delta));
         }
 
-        // --- 2. DÉPLACEMENTS & ACTIONS (Seulement si non étourdi) ---
+        // --- 2. DÉPLACEMENTS & ACTIONS ---
         let vx = 0, vy = 0;
 
         if (!this.isStunned) {
@@ -123,12 +145,12 @@ export default class Player {
             if (keys.up.isDown) vy = -1;
             else if (keys.down.isDown) vy = 1;
 
-            // Slide
+            // Déclenchement du Slide
             if (Phaser.Input.Keyboard.JustDown(keys.ctrl) && this.stamina > this.slideStaminaCost) {
                 this.slide(vx, vy);
             }
 
-            // Calcul vitesse
+            // Calcul des vecteurs de vitesse final
             let finalVx, finalVy, currentSpeed;
             if (this.isSliding) {
                 finalVx = this.slideVec.x; 
@@ -143,29 +165,34 @@ export default class Player {
                 finalVx = vx; 
                 finalVy = vy;
                 
-                if (isRunning) this.stamina -= 0.01;
-                else this.stamina = Math.min(this.maxStamina, this.stamina + 0.01);
+                // Gestion Stamina course
+                if (isRunning && (vx !== 0 || vy !== 0)) this.stamina -= 0.003 * delta;
+                else this.stamina = Math.min(this.maxStamina, this.stamina + 0.01 * delta);
             }
 
-            // Physique
+            // Application de la physique avec détection de collision manuelle
             const tryMove = (dx, dy) => {
                 this.scene.matter.body.translate(this.body, { x: dx, y: dy });
                 if (this.scene.matter.query.collides(this.body, collisionBodies).length > 0) {
                     this.scene.matter.body.translate(this.body, { x: -dx, y: -dy });
                 }
             };
-            tryMove(finalVx * currentSpeed, 0);
-            tryMove(0, finalVy * currentSpeed);
+            
+            if (finalVx !== 0 || finalVy !== 0) {
+                tryMove(finalVx * currentSpeed, 0);
+                tryMove(0, finalVy * currentSpeed);
+            }
 
-            // Animations de mouvement
+            // Gestion des animations de mouvement
             if (!this.isSliding && !this.isAttacking) {
                 if (vx !== 0 || vy !== 0) {
                     const isRunning = keys.shift.isDown && this.stamina > this.staminaRunCost + 1;
                     const anim = isRunning ? "run" : "walk";
                     this.playDualAnim(anim);
                     this.setDualFlip(vx < 0);
+                    // Bruitages de pas
                     if (!this.scene.sound.get('step')?.isPlaying) {
-                        this.scene.sound.play('step', { volume: 0.2, rate: anim === "run" ? 1.5 : 1.2 });
+                        this.scene.sound.play('step', { volume: 0.1, rate: anim === "run" ? 1.5 : 1.2 });
                     }
                 } else {
                     this.playDualAnim("idle");
@@ -173,7 +200,7 @@ export default class Player {
             }
         }
 
-        // --- 3. SYNCHRONISATION VISUELLE (Toujours active) ---
+        // --- 3. SYNCHRONISATION VISUELLE
         this.sprite.x = this.body.position.x;
         this.sprite.y = this.body.position.y;
         
@@ -182,11 +209,13 @@ export default class Player {
         this.weaponSprite.depth = this.sprite.depth - 0.1;
         this.weaponSprite.setFlipX(this.sprite.flipX);
 
+        // Ajustement visuel pour la batte de baseball au repos
         if (!this.isAttacking && this.currentWeapon === 'baseball') {
             this.weaponSprite.y -= 6;
         }
     }
 
+    //Attaque avec l'arme actuelle vers la souris
     attack() {
         if (this.isAttacking || this.isStunned || this.isDead) return;
         const config = WEAPON_CONFIG[this.currentWeapon];
@@ -196,11 +225,12 @@ export default class Player {
         this.setDualFlip(pointer.worldX < this.sprite.x);
 
         this.isAttacking = true;
-        this.stamina -= 1.5;
+        this.stamina -= this.staminaAttackCost;
         this.weaponSprite.setVisible(true);
         this.scene.sound.play('punch', { volume: 0.4, detune: Phaser.Math.Between(-200, 200) });
         this.playDualAnim("attack");
 
+        // Calcul de la position de la Hitbox
         const angle = Phaser.Math.Angle.Between(this.sprite.x, this.sprite.y, pointer.worldX, pointer.worldY);
         let finalRange = config.range;
         if (angle > 0.5 && angle < 2.5) finalRange *= 0.2;
@@ -224,14 +254,30 @@ export default class Player {
         });
     }
 
+    // Coup de pied (attaque rapide sans arme)
     kick() {
-        if (this.isAttacking || this.isSliding || this.isStunned) return;
+        if (this.isAttacking || this.isSliding || this.isStunned || this.isDead) return;
+
+        const config = WEAPON_CONFIG[this.currentWeapon];
+        if (!config) return;
+
+        const pointer = this.scene.input.activePointer;
+        this.setDualFlip(pointer.worldX < this.sprite.x);
+
         this.isAttacking = true;
-        this.stamina -= 1;
+        this.stamina -= this.staminaKickCost;
         this.scene.sound.play('punch', { volume: 0.3, detune: Phaser.Math.Between(-200, 200) });
         this.playDualAnim("kick");
 
-        this.activeHitbox = this.scene.matter.add.circle(this.sprite.x, this.sprite.y, 4, { 
+        // Calcul de la position de la Hitbox
+        const angle = Phaser.Math.Angle.Between(this.sprite.x, this.sprite.y, pointer.worldX, pointer.worldY);
+        let finalRange = config.range;
+        if (angle > 0.5 && angle < 2.5) finalRange *= 0.2;
+
+        const hitboxX = this.sprite.x + Math.cos(angle) * finalRange;
+        const hitboxY = this.sprite.y + Math.sin(angle) * finalRange + config.offsetY;
+
+        this.activeHitbox = this.scene.matter.add.circle(hitboxX, hitboxY, config.radius, { 
             isSensor: true, 
             label: 'heroKick' 
         });
@@ -246,41 +292,51 @@ export default class Player {
         });
     }
 
+    // Effectue une glissade rapide
     slide(vx, vy) {
         if (!this.canSlide || this.isAttacking || (vx === 0 && vy === 0)) return;
         this.isSliding = true;
         this.canSlide = false;
         this.slideSpeed = 0.45;
-        this.stamina -= 1;
+        this.stamina -= this.slideStaminaCost;
         this.slideVec.set(vx, vy).normalize();
         this.playDualAnim("slide");
+        
+        // Cooldown du slide (3s)
         this.scene.time.delayedCall(3000, () => { this.canSlide = true; });
     }
 
+    // Appelé par les ennemis pour infliger des dégâts
     takeDamage(amount, source) {
-        if (this.isInvulnerable || this.hp <= 0) return;
+        if (this.isInvulnerable || this.hp <= 0 || this.isDead) return;
 
         this.lastDamageTime = this.scene.time.now;
         this.hp -= amount;
         this.isInvulnerable = true;
         this.isStunned = true;
 
-        this.scene.sound.play('hurt', { volume: 0.8, detune: Phaser.Math.Between(-200, 200) });
+        this.scene.sound.play('hurt', { 
+            volume: 0.8,
+            detune: Phaser.Math.Between(-200, 200)
+         });
         this.sprite.setTint(0xff0000);
 
+        // Knockback
         if (source) {
             const angle = Phaser.Math.Angle.Between(source.x, source.y, this.sprite.x, this.sprite.y);
             this.scene.matter.body.setVelocity(this.body, { 
-                x: Math.cos(angle) * 1, 
-                y: Math.sin(angle) * 1 
+                x: Math.cos(angle) * 2, 
+                y: Math.sin(angle) * 2 
             });
         }
 
+        // Fin de l'étourdissement
         this.scene.time.delayedCall(200, () => { 
             this.isStunned = false; 
             if (!this.isDead) this.scene.matter.body.setVelocity(this.body, { x: 0, y: 0 });
         });
         
+        // Fin de l'invulnérabilité
         this.scene.time.delayedCall(700, () => {
             this.isInvulnerable = false;
             if (!this.isDead) this.sprite.clearTint();
@@ -289,22 +345,24 @@ export default class Player {
         if (this.hp <= 0) this.die();
     }
 
+    //  Gère la mort du joueur avec effet de fantôme et changement de scène
     die() {
         if (this.isDead) return;
         this.isDead = true;
 
         if (this.body) {
             this.body.collisionFilter.category = 0;
-            this.body.collisionFilter.mask = 0;
-            // On arrête tout mouvement résiduel
             this.scene.matter.body.setVelocity(this.body, { x: 0, y: 0 });
         }
+
+        this.sprite.anims.stop();
 
         this.scene.sound.play('death-player', { volume: 0.5 });
         this.weaponSprite.setVisible(false);
         this.sprite.setTint(0x333333);
-        this.sprite.setAngle(90);
+        this.sprite.setAngle(90); // Le perso "tombe"
 
+        // Effet de fantôme qui monte au ciel
         const ghost = this.scene.add.sprite(this.sprite.x, this.sprite.y, this.sprite.texture.key);
         ghost.setScale(this.sprite.scaleX).setAlpha(0.5).setTint(0xffffff);
         ghost.setDepth(this.sprite.depth + 1);
@@ -314,7 +372,7 @@ export default class Player {
             y: ghost.y - 150,
             alpha: 0,
             scale: ghost.scaleX * 1.5,
-            duration: 3500,
+            duration: 2500,
             ease: 'Linear',
             onComplete: () => {
                 ghost.destroy();
@@ -322,12 +380,14 @@ export default class Player {
                     this.scene.matter.world.remove(this.body);
                     this.body = null; 
                 }
+                // Transition vers l'écran de Game Over
                 this.scene.scene.launch('DeathScene', { origin: this.scene.scene.key });
                 this.scene.scene.pause();
             }
         });
     }
 
+    //Joue simultanément l'animation du corps et de l'arme
     playDualAnim(key) {
         this.sprite.play(key, true);
         if (this.currentWeapon) {
@@ -341,26 +401,20 @@ export default class Player {
         }
     }
 
+    // Oriente le héros et l'arme vers la gauche ou la droite
     setDualFlip(isFlipped) {
         this.sprite.setFlipX(isFlipped);
         this.weaponSprite.setFlipX(isFlipped);
     }
 
-    // --- UTILS ---
-    setWeapon(newWeaponName) {
-        this.currentWeapon = newWeaponName;
-        this.createSprite(this.sprite.x, this.sprite.y); // Recrée les anims si besoin
-    }
-
+    // Change l'arme équipée
     changeWeapon(weaponKey) {
         this.currentWeapon = weaponKey;
-        
         if (this.weaponSprite) {
             if (!weaponKey || weaponKey === '') {
                 this.weaponSprite.setVisible(false);
             } else {
                 this.weaponSprite.setVisible(true);
-                // On récupère l'anim actuelle du perso pour l'appliquer à l'arme
                 const currentAnimKey = (this.sprite.anims && this.sprite.anims.currentAnim) 
                     ? this.sprite.anims.currentAnim.key 
                     : "idle";

@@ -1,11 +1,17 @@
-// components/WeaponConfig.js
 const WEAPON_CONFIG = {
+    '': {
+        range: 6,
+        radius: 5,
+        offsetY: 0,
+        damage: 3,
+        animationKey: 'kick'
+    },
     'baseball': {
-        range: 10,      // Distance par rapport au centre du joueur
-        radius: 9,     // Taille du cercle de collision
-        offsetY: 0,     // Ajustement vertical (pour viser plus bas/haut)
-        damage: 10,     // Optionnel : pour plus tard
-        animationKey: 'attacking' // Pour faire le lien avec les textures
+        range: 10,
+        radius: 9,
+        offsetY: 0,
+        damage: 10,
+        animationKey: 'attacking'
     },
     'knife': {
         range: 12,

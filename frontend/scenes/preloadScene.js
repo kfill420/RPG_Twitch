@@ -1,110 +1,151 @@
+/**
+ * @class PreloadScene
+ * @description Gère le chargement centralisé des assets. 
+ */
+
 export default class PreloadScene extends Phaser.Scene {
-    constructor() { super({ key: 'PreloadScene' }); }
+    constructor() {
+        super({ key: 'PreloadScene' });
+    }
+
+    init(data) {
+        this.startData = data;
+    }
 
     preload() {
         const { width, height } = this.scale;
 
-        // --- 1. CRÉATION DE L'INTERFACE DE CHARGEMENT ---
-        // Fond de la barre (contour gris)
+        // 1. UI DE CHARGEMENT
+        this._createLoadingUI(width, height);
+
+        // 2. CONFIGURATION DU CHEMIN RACINE
+        this.load.setPath('./assets/'); 
+
+        // 3. CHARGEMENT DES FICHIERS DE BASE (MAP & JSON)
+        this.load.tilemapTiledJSON("map", "map2.tmj");
+        this.load.image("tiles", "exterior2.png");
+        this.load.json("bushes_data", "Bushes.json");
+        this.load.json("exterior_data", "exterior.json");
+        this.load.json("assets_manifest", "objects/assets_manifest.json");
+
+        // 4. CHARGEMENT DU CONTENU DYNAMIQUE (MANIFEST)
+        this.load.once("filecomplete-json-assets_manifest", (key, type, data) => {
+            if (data?.images) {
+                this.load.setPath(''); 
+                data.images.forEach(img => {
+                    this.load.image(img.key, img.url);
+                });
+            }
+        });
+
+        // 5. CHARGEMENT DES ENTITÉS
+        this.load.setPath('./assets/'); 
+        this._loadEnemies([1, 2, 3]);
+        this._loadHeroAnimations();
+        this._loadWeaponAnimations('baseball');
+
+        // 6. CHARGEMENT AUDIO
+        this._loadAudio();
+    }
+
+
+    _createLoadingUI(width, height) {
+        const barWidth = 320;
+        const barHeight = 50;
+        
         const progressBox = this.add.graphics();
-        progressBox.fillStyle(0x222222, 0.8);
-        progressBox.fillRect(width / 2 - 160, height / 2 - 25, 320, 50);
-
-        // Barre de remplissage
         const progressBar = this.add.graphics();
+        
+        progressBox.fillStyle(0x222222, 0.8);
+        progressBox.fillRoundedRect(width / 2 - barWidth / 2, height / 2 - barHeight / 2, barWidth, barHeight, 10);
 
-        // Texte de chargement
-        const loadingText = this.add.text(width / 2, height / 2 - 50, 'Chargement...', {
+        const loadingText = this.add.text(width / 2, height / 2 - 60, 'Préparation...', {
             fontSize: '20px',
+            fontFamily: 'Arial',
             fill: '#ffffff'
         }).setOrigin(0.5);
 
-        // Pourcentage
         const percentText = this.add.text(width / 2, height / 2, '0%', {
             fontSize: '18px',
-            fill: '#ffffff'
+            fontFamily: 'Arial Black',
+            fill: '#00ffff'
         }).setOrigin(0.5);
 
-        // --- 2. ÉVÉNEMENTS DU CHARGEUR ---
-        // Se déclenche à chaque fichier chargé
         this.load.on('progress', (value) => {
-            percentText.setText(parseInt(value * 100) + '%');
             progressBar.clear();
             progressBar.fillStyle(0x00ffff, 1);
-            progressBar.fillRect(width / 2 - 150, height / 2 - 15, 300 * value, 30);
+            progressBar.fillRoundedRect(width / 2 - (barWidth - 20) / 2, height / 2 - 15, (barWidth - 20) * value, 30, 5);
+            percentText.setText(`${Math.floor(value * 100)}%`);
         });
 
-        // Optionnel : affiche le nom du fichier actuel
         this.load.on('fileprogress', (file) => {
-            loadingText.setText('Chargement : ' + file.key);
+            loadingText.setText(`Chargement : ${file.key}`);
         });
 
-        this.load.tilemapTiledJSON("map", "./assets/map2.tmj");
-        this.load.image("tiles", "./assets/exterior2.png");
-        this.load.json("bushes_data", "./assets/Bushes.json");
-        this.load.json("exterior_data", "./assets/exterior.json");
-        this.load.json("assets", "./assets/objects/assets_manifest.json");
-
-        const loadSlime = (id) => {
-            const path = `./assets/mobs/Slimes/${id}/Slime${id}`;
-            const config = { frameWidth: 64, frameHeight: 64 };
-
-            this.load.spritesheet(`slime${id}-idle`, `${path}_Idle_without_shadow.png`, config);
-            this.load.spritesheet(`slime${id}-run`, `${path}_Run_without_shadow.png`, config);
-            this.load.spritesheet(`slime${id}-attack`, `${path}_Attack_without_shadow.png`, config);
-            this.load.spritesheet(`slime${id}-hurt`, `${path}_Hurt_without_shadow.png`, config);
-            this.load.spritesheet(`slime${id}-death`, `${path}_Death_without_shadow.png`, config);
-        };
-        [1, 2, 3].forEach(id => loadSlime(id));
-
-        this.load.once("filecomplete-json-assets", () => {
-            const data = this.cache.json.get("assets");
-            if (data?.images) data.images.forEach(img => this.load.image(img.key, img.url));
+        this.load.on('complete', () => {
+            // Nettoyage propre des objets graphiques
+            [progressBar, progressBox, loadingText, percentText].forEach(obj => obj.destroy());
         });
+    }
 
-        const loadHeroAnims = (key, folder, prefix, count) => {
-            for (let i = 0; i <= count; i++) {
+    _loadEnemies(ids) {
+        const config = { frameWidth: 64, frameHeight: 64 };
+        ids.forEach(id => {
+            const path = `mobs/Slimes/${id}/Slime${id}`;
+            const anims = ['Idle', 'Run', 'Attack', 'Hurt', 'Death'];
+            anims.forEach(anim => {
+                this.load.spritesheet(`slime${id}-${anim.toLowerCase()}`, `${path}_${anim}_without_shadow.png`, config);
+            });
+        });
+    }
+
+    _loadHeroAnimations() {
+        const heroPath = 'character/forest_ranger/3/';
+        const configs = [
+            { key: 'idle', folder: 'idle', prefix: 'Idle', count: 17 },
+            { key: 'walk', folder: 'walking', prefix: 'Walking', count: 23 },
+            { key: 'run', folder: 'running', prefix: 'Running', count: 11 },
+            { key: 'kick', folder: 'kicking', prefix: 'Kicking', count: 11 },
+            { key: 'attack', folder: 'attacking', prefix: 'Attacking', count: 11 },
+            { key: 'slide', folder: 'sliding', prefix: 'Sliding', count: 5 }
+        ];
+
+        configs.forEach(cfg => {
+            for (let i = 0; i <= cfg.count; i++) {
                 const num = i.toString().padStart(3, "0");
-                this.load.image(`hero-${key}-${i}`, `./assets/character/forest_ranger/3/${folder}/0_Forest_Ranger_${prefix}_${num}.png`);
+                this.load.image(`hero-${cfg.key}-${i}`, `${heroPath}${cfg.folder}/0_Forest_Ranger_${cfg.prefix}_${num}.png`);
             }
-        };
+        });
+    }
 
-        const loadWeaponAnims = (weaponName, key, folder, prefix, count) => {
-            for (let i = 0; i <= count; i++) {
+    _loadWeaponAnimations(weaponName) {
+        const weaponPath = `weapons/${weaponName}/`;
+        const anims = [
+            { key: 'attacking', folder: 'attacking', prefix: `0_Forest_Ranger_Baseball`, count: 11 },
+            { key: 'idle', folder: 'idle', prefix: `0_Forest_Ranger_Idle`, count: 17 }
+        ];
+
+        anims.forEach(anim => {
+            for (let i = 0; i <= anim.count; i++) {
                 const num = i.toString().padStart(3, "0");
-                this.load.image(`${weaponName}-${key}-${i}`, `./assets/weapons/${weaponName}/${folder}/${prefix}_${num}.png`);
+                this.load.image(`${weaponName}-${anim.key}-${i}`, `${weaponPath}${anim.folder}/${anim.prefix}_${num}.png`);
             }
-        };
+        });
+    }
 
-        this.load.audio('step', './assets/sounds/step.mp3');
-        this.load.audio('punch', './assets/sounds/punch.mp3');
-        this.load.audio('slime-move', './assets/sounds/slime-move.mp3');
-        this.load.audio('hurt', './assets/sounds/hurt.mp3');
-        this.load.audio('death-player', './assets/sounds/death-player.mp3');
-        this.load.audio('death-mob', './assets/sounds/death-mob.mp3');
-        this.load.audio('slime-hit', './assets/sounds/slime-hit.mp3');
-        this.load.audio('ground-explosion', './assets/sounds/ground-explosion.mp3');
-        this.load.audio('metal-bite', './assets/sounds/metal-bite.mp3');
-        this.load.audio('slime-splash', './assets/sounds/slime-splash.mp3');
-
-        loadHeroAnims('idle', 'idle', 'Idle', 17);
-        loadHeroAnims('walk', 'walking', 'Walking', 23);
-        loadHeroAnims('run', 'running', 'Running', 11);
-        loadHeroAnims('kick', 'kicking', 'Kicking', 11);
-        loadHeroAnims('attack', 'attacking', 'Attacking', 11);
-        loadHeroAnims('slide', 'sliding', 'Sliding', 5);
-
-        loadWeaponAnims('baseball', 'attacking', 'attacking', '0_Forest_Ranger_Baseball', 11);
-        loadWeaponAnims('baseball', 'idle', 'idle', '0_Forest_Ranger_Idle', 17);
+    _loadAudio() {
+        // Changement de dossier pour les sons
+        this.load.setPath('./assets/sounds/');
+        const sounds = [
+            'step', 'punch', 'slime-move', 'hurt', 'death-player', 
+            'death-mob', 'slime-hit', 'ground-explosion', 'metal-bite', 'slime-splash'
+        ];
+        sounds.forEach(s => this.load.audio(s, `${s}.mp3`));
+        
+        this.load.setPath(''); 
     }
 
     create() {
-        // Une fois que tout est dans le cache, on lance la GameScene
-        // On peut passer les data (mode solo/streamer) reçues du menu
         this.scene.start('GameScene', this.startData);
-    }
-
-    init(data) {
-        this.startData = data; 
     }
 }

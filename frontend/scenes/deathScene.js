@@ -1,8 +1,13 @@
+/**
+ * @class DeathScene
+ * @description Gère la mort du joueur. 
+ */
+
 export default class DeathScene extends Phaser.Scene {
     constructor() { super("DeathScene"); }
 
     init(data) {
-        this.originScene = data.origin; // Pour savoir quelle scène redémarrer
+        this.originScene = data.origin;
     }
 
     create() {
@@ -20,10 +25,10 @@ export default class DeathScene extends Phaser.Scene {
 
         // 3. Bouton REJOUER
         const btnRetry = this.createButton(width / 2, height / 2 + 20, 'REJOUER', () => {
-            this.scene.stop(); // Ferme DeathScene
+            this.scene.stop();
             this.scene.stop('UIScene');
-            this.scene.stop(this.originScene); // Arrête GameScene
-            this.scene.start(this.originScene); // Redémarre GameScene
+            this.scene.stop(this.originScene);
+            this.scene.start(this.originScene);
         });
 
         // 4. Bouton MENU
@@ -31,7 +36,7 @@ export default class DeathScene extends Phaser.Scene {
             this.scene.stop();
             this.scene.stop('UIScene');
             this.scene.stop(this.originScene);
-            this.scene.start('MenuScene'); // Adapte le nom à ton menu
+            this.scene.start('MenuScene'); 
         });
     }
 
