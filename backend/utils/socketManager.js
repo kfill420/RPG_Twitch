@@ -8,7 +8,7 @@ const players = {}; // Objet pour stocker les joueurs : { socketId: { x, y, anim
 function initSocket(server) {
   io = new Server(server, {
     cors: {
-      origin: "*", // À restreindre en production
+      origin: "https://corehunter.vercel.app",
       methods: ["GET", "POST"]
     }
   });
