@@ -1,18 +1,15 @@
-name: Deploy Backend to Oracle VPS
+name: Deploy Corehunter (Port 3001)
 
 on:
   push:
-    branches:
-      - main  # Déclenche le déploiement quand tu pushes sur main
+    branches: [ main ]
+    paths: [ 'backend/**' ]
 
 jobs:
   deploy:
     runs-on: ubuntu-latest
     steps:
-      - name: Checkout code
-        uses: actions/checkout@v3
-
-      - name: Deploy to VPS via SSH
+      - name: Deploy via SSH
         uses: appleboy/ssh-action@master
         with:
           host: ${{ secrets.SSH_HOST }}
@@ -20,17 +17,9 @@ jobs:
           key: ${{ secrets.SSH_KEY }}
           port: ${{ secrets.SSH_PORT }}
           script: |
-            # On va dans le dossier du projet
-            cd /home/${{ secrets.SSH_USER }}/corehunter
-            
-            # On récupère les dernières modifs
+            cd ~/corehunter/backend
             git pull origin main
-            
-            # On installe les dépendances
-            npm install
-            
-            # On relance le serveur avec PM2
-            pm2 restart corehunter-back || pm2 start index.js --name "corehunter-back"
-            
-            # On sauvegarde la config PM2 pour le reboot du VPS
-            pm2 save
+            # On reconstruit l'image et on relance le conteneur
+            sudo docker compose up --build -d
+            # On nettoie les images orphelines pour économiser l'espace disque
+            sudo docker image prune -f
