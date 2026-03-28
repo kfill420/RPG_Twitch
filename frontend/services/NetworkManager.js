@@ -39,7 +39,27 @@ class NetworkManager {
             const scene = gameInstance.scene.getScene('GameScene');
             if (scene && scene.sys.isActive()) scene.removeRemotePlayer(playerId);
         });
-        
+
+        this.socket.on("slimeUpdate", (serverSlimes) => {
+            const scene = gameInstance.scene.getScene('GameScene');
+            if (scene && scene.sys.isActive()) {
+                scene.updateEnemiesFromServer(serverSlimes);
+            }
+        });
+
+        this.socket.on("slimeStatUpdate", (data) => {
+            const scene = gameInstance.scene.getScene('GameScene');
+            if (scene && scene.sys.isActive()) {
+                scene.handleSlimeStatChange(data);
+            }
+        });
+
+        this.socket.on("slimeAction", (data) => {
+            const scene = gameInstance.scene.getScene('GameScene');
+            if (scene && scene.sys.isActive()) {
+                scene.handleSlimeAction(data);
+            }
+        });
     }
 
     sendAction(movementData) {

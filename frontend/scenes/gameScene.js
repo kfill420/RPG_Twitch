@@ -130,6 +130,7 @@ export default class GameScene extends Phaser.Scene {
         const settings = this.scene.get('SettingsScene');
     
         // Vérification modifications des touches
+        settings.events.off('keyChanged');
         settings.events.on('keyChanged', () => {
             console.log("[GameScene] Touches modifiées, actualisation...");
             this.updateControls();
@@ -159,12 +160,7 @@ export default class GameScene extends Phaser.Scene {
     }
 
     _spawnEnemies() {
-        const types = [1, 2, 3];
-        types.forEach((type, index) => {
-            const slime = new Slime(this, 400 + (index * 40), 400, type);
-            this.enemies.push(slime);
-            this.sortingGroup.add(slime.sprite);
-        });
+        this.enemies = [];
     }
 
     _setupCollisionEvents() {
@@ -180,14 +176,6 @@ export default class GameScene extends Phaser.Scene {
                         const enemy = this.enemies.find(e => e.sprite?.body === enemyBody);
                         enemy?.takeDamage(1);
                     }
-                }
-
-                // Joueur touchant physiquement Ennemi
-                const playerBody = bodyA.label === 'heroBody' ? bodyA : (bodyB.label === 'heroBody' ? bodyB : null);
-                const enemyBody = bodyA.label === 'enemy' ? bodyA : (bodyB.label === 'enemy' ? bodyB : null);
-                
-                if (playerBody && enemyBody) {
-                    this.player.takeDamage(1, enemyBody.position);
                 }
             });
         });
@@ -206,12 +194,63 @@ export default class GameScene extends Phaser.Scene {
 
     _updateEnemies() {
         this.enemies = this.enemies.filter(enemy => {
+            if (enemy.isDead) {
+                // On le garde dans la liste seulement si le sprite existe encore (pendant l'anim)
+                // Mais on ne l'update plus
+                return enemy.sprite && enemy.sprite.active;
+            }
+            
             if (enemy.sprite?.active) {
-                enemy.update(this.player.sprite, this.staticBodies);
+                enemy.update();
                 return true;
             }
             return false;
         });
+    }
+
+    updateEnemiesFromServer(serverSlimes) {
+        Object.values(serverSlimes).forEach(data => {
+            if (data.dead) {
+                if (data.dead) {
+                    const slime = this.enemies.find(e => e.id === data.id);
+                    if (slime && !slime.isDead) slime.die();
+                    return;
+                }
+            }
+
+            let slime = this.enemies.find(e => e.id === data.id);
+            
+            // Si le slime n'existe pas encore localement, on le crée
+            if (!slime) {
+                slime = new Slime(this, data.x, data.y, data.type, data.id);
+                this.enemies.push(slime);
+                if (this.sortingGroup) this.sortingGroup.add(slime.sprite);
+            }
+        
+            // On synchronise (mouvement + animations)
+            slime.syncFromServer(data);
+        });
+    }
+    
+    handleSlimeStatChange(data) {
+        const slime = this.enemies.find(e => e.id === data.id);
+        if (!slime) return;
+    
+        if (data.dead) {
+            slime.die();
+        } else {
+            // Déclenche l'effet visuel de dégâts
+            slime.sprite.setTint(0xff0000);
+            this.time.delayedCall(200, () => slime.sprite.clearTint());
+        }
+    }
+
+    handleSlimeAction(data) {
+        const slime = this.enemies.find(e => e.id === data.id);
+        if (!slime) return;
+        if (data.action === "ATTACK") {
+            slime.attack(data.targetId);
+        }
     }
 
     _dispatchUIUpdate() {

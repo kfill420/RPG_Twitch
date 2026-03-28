@@ -3,10 +3,13 @@
  * @description Gère l'IA, les animations directionnelles et les sons spatiaux des ennemis.
  */
 
+import { networkManager } from '../services/NetworkManager.js';
+
 export default class Slime {
-    constructor(scene, x, y, type = 1) {
+    constructor(scene, x, y, type = 1, id) {
         this.scene = scene;
         this.type = type;
+        this.id = id;
 
         // --- 1. CONFIGURATION DES STATS ---
         const stats = {
@@ -15,6 +18,9 @@ export default class Slime {
             3: { hp: 5, damage: 2, speed: 0.12, chaseSpeed: 0.25, range: 22 },
         };
         const config = stats[type] || stats[1];
+
+        this.targetX = x;
+        this.targetY = y;
 
         // --- 2. ÉTATS & IA ---
         this.hp = config.hp;
@@ -26,22 +32,26 @@ export default class Slime {
         this.isHurt = false;
         this.isDead = false;
         this.isAttacking = false;
-        this.state = "WANDER"; // WANDER ou CHASE
+        // this.state = "WANDER"; // WANDER ou CHASE
         
-        this.detectionRange = 100;
-        this.nextDecisionTime = 0;
-        this.wanderVec = new Phaser.Math.Vector2();
+        // this.detectionRange = 100;
+        // this.nextDecisionTime = 0;
+        // this.wanderVec = new Phaser.Math.Vector2();
         this.lastDir = 'down';
 
         // --- 3. PHYSIQUE (Matter.js) ---
         this.sprite = scene.matter.add.sprite(x, y, `slime${type}-idle`, 0);
         this.sprite.setScale(0.8);
-        this.sprite.setBody({ type: 'circle', radius: 7 }); 
+        // this.sprite.setBody({ type: 'circle', radius: 7 }); 
         this.sprite.setFixedRotation();
-        this.sprite.setFrictionAir(0.1);
+        // this.sprite.setFrictionAir(0.1);
+        this.sprite.setSensor(true);
         this.sprite.body.label = 'enemy'; 
 
         this.createAnims();
+
+        this.targetX = x;
+        this.targetY = y;
     }
 
     // Crée les animations directionnelles basées sur les spritesheets 
@@ -92,64 +102,39 @@ export default class Slime {
     }
 
     // Boucle de mise à jour appelée par GameScene
-    update(playerSprite, staticBodies) {
-        if (this.isDead || !this.sprite.body) return;
+    update() {
+        if (this.isDead || !this.sprite || !this.sprite.body) return;
 
+        // LERP : On déplace le sprite de 20% de la distance restante à chaque frame
+        // Cela crée un mouvement fluide même si le serveur n'envoie que 30 positions/sec
+        const lerpFactor = 0.15; 
+        this.sprite.x = Phaser.Math.Linear(this.sprite.x, this.targetX, lerpFactor);
+        this.sprite.y = Phaser.Math.Linear(this.sprite.y, this.targetY, lerpFactor);
+    }
+
+    syncFromServer(serverData) {
+        if (this.isDead || serverData.dead) {
+            if (!this.isDead) this.die();
+            return;
+        }
+
+        if (this.isAttacking || this.isHurt) {
+            this.targetX = serverData.x;
+            this.targetY = serverData.y;
+            return;
+        };
+
+        // Calculer la direction pour l'anim en comparant l'ancienne position et la nouvelle
+        this.targetX = serverData.x;
+        this.targetY = serverData.y;
+
+        const dx = serverData.x - this.sprite.x;
+        const dy = serverData.y - this.sprite.y;
         
-
-        if (this.isHurt || this.isAttacking) {
-            this.sprite.setVelocity(0, 0);
-            return;
-        }
-
-        const playerIsDead = this.scene.player && this.scene.player.isDead;
-        const distanceToPlayer = Phaser.Math.Distance.Between(this.sprite.x, this.sprite.y, playerSprite.x, playerSprite.y);
-        const time = this.scene.time.now;
-
-        // 1. Changement d'état
-        if (playerIsDead) {
-            this.state = 'WANDER';
-        } else if (distanceToPlayer < this.attackRange) {
-            this.attack(playerSprite);
-            return;
-        } else if (distanceToPlayer < this.detectionRange) {
-            this.state = 'CHASE';
-        } else {
-            this.state = 'WANDER';
-        }
-
-        // 2. Calcul du vecteur de mouvement
-        let moveVec = new Phaser.Math.Vector2(0, 0);
-        let speed = this.baseSpeed;
-
-        if (this.state === 'CHASE') {
-            speed = this.chaseSpeed;
-            const angle = Phaser.Math.Angle.Between(this.sprite.x, this.sprite.y, playerSprite.x, playerSprite.y);
-            moveVec.set(Math.cos(angle), Math.sin(angle));
-        } else {
-            if (time > this.nextDecisionTime) {
-                const isIdling = Math.random() > 0.6;
-                if (isIdling) {
-                    this.wanderVec.set(0, 0);
-                } else {
-                    const randomAngle = Math.random() * Math.PI * 2;
-                    this.wanderVec.set(Math.cos(randomAngle), Math.sin(randomAngle));
-                }
-                this.nextDecisionTime = time + Phaser.Math.Between(2000, 4000);
-            }
-            moveVec.copy(this.wanderVec);
-        }
-
-        // 3. Application du mouvement et Animation
-        if (moveVec.length() > 0) {
-            const vx = moveVec.x * speed * this.scene.game.loop.delta;
-            const vy = moveVec.y * speed * this.scene.game.loop.delta;
-
-            this.sprite.setVelocity(vx, vy);
-            this.updateDirectionalAnim(moveVec, 'run');
+        if (Math.abs(dx) > 0.1 || Math.abs(dy) > 0.1) {
+            this.updateDirectionalAnim({x: dx, y: dy}, 'run');
             this.handleMoveSounds();
         } else {
-            this.sprite.setVelocity(0, 0);
             this.sprite.play(`slime${this.type}-idle-${this.lastDir}`, true);
         }
     }
@@ -184,19 +169,28 @@ export default class Slime {
         }
     }
 
-    attack(playerSprite) {
-        if (this.isAttacking || (this.scene.player && this.scene.player.isDead)) return;
+    attack(targetId) {
+        if (this.isAttacking || this.isDead) return;
         this.isAttacking = true;
-        this.sprite.setVelocity(0, 0);
 
-        const angle = Phaser.Math.Angle.Between(this.sprite.x, this.sprite.y, playerSprite.x, playerSprite.y);
+        const isMe = (networkManager.socket.id === targetId);
+        let targetSprite = isMe ? this.scene.player.sprite : this.scene.otherPlayers.get(targetId);
+        
+        if (!targetSprite || !targetSprite.active) {
+            this.isAttacking = false;
+            return;
+        }
+
+        const angle = Phaser.Math.Angle.Between(this.sprite.x, this.sprite.y, targetSprite.x, targetSprite.y);
         this.updateDirectionalAnim(new Phaser.Math.Vector2(Math.cos(angle), Math.sin(angle)), 'attack');
 
         const attackFrames = { 1: 6, 2: 7, 3: 4 };
         const impactFrame = attackFrames[this.type] || 5;
+        let damageDealt = false;
 
         const onUpdate = (anim, frame) => {
             if (frame.index === impactFrame) {
+                damageDealt = true;
                 const sound = this.type === 3 ? 'ground-explosion' : this.type === 2 ? 'metal-bite' : 'slime-splash';
 
                 const spatial = this.getSpatialConfig(); 
@@ -206,21 +200,19 @@ export default class Slime {
                     detune: Phaser.Math.Between(-200, 200)
                 });
 
-                const dist = Phaser.Math.Distance.Between(this.sprite.x, this.sprite.y, playerSprite.x, playerSprite.y);
-
-                if (dist < this.attackRange + 15 && this.scene.player) {
-                    this.scene.player.takeDamage(this.damage, this.sprite);
+                if (isMe) {
+                    const dist = Phaser.Math.Distance.Between(this.sprite.x, this.sprite.y, targetSprite.x, targetSprite.y);
+                    const impactBuffer = 15;
+                    if (dist < this.attackRange + impactBuffer) { 
+                        this.scene.player.takeDamage(this.damage || 1, this.sprite);
+                    }
+                } else {
+                    targetSprite = this.scene.otherPlayers.get(targetId);
                 }
 
                 this.sprite.off('animationupdate', onUpdate);
             }
         };
-
-        this.sprite.on('animationupdate', onUpdate);
-
-        this.sprite.once('animationcomplete', () => {
-            this.isAttacking = false;
-        });
 
         this.sprite.on('animationupdate', onUpdate);
         this.sprite.once('animationcomplete', () => {
@@ -229,9 +221,13 @@ export default class Slime {
     }
 
     takeDamage(amount) {
-        if (this.isHurt || this.isDead || this.hp <= 0) return;
+        if (this.isHurt || this.isDead) return;
 
-        this.hp -= amount;
+        if (this.scene.gameMode === 'multi') {
+            networkManager.socket.emit("hitSlime", { id: this.id, damage: amount });
+        }
+
+        // this.hp -= amount;
         this.isHurt = true;
         this.sprite.setTint(0xff0000);
 
@@ -242,22 +238,25 @@ export default class Slime {
             detune: Phaser.Math.Between(-200, 200)
         });
 
-        if (this.hp <= 0) {
-            this.die();
-        } else {
-            this.scene.time.delayedCall(300, () => {
-                this.isHurt = false;
-                this.sprite.clearTint();
-            });
-        }
+        this.scene.time.delayedCall(300, () => {
+            this.isHurt = false;
+            this.sprite.clearTint();
+        });
+
+
     }
 
     die() {
         if (this.isDead) return;
+
         this.isDead = true;
-        this.sprite.setVelocity(0, 0);
-        this.sprite.setSensor(true);
-        this.sprite.play(`slime${this.type}-death`);
+        
+        if (this.sprite.body) {
+            this.sprite.setStatic(true);
+            this.sprite.setSensor(true);
+        }
+
+        this.sprite.play(`slime${this.type}-death`, true);
         
         this.scene.sound.play('death-mob', { 
             volume: 0.5,

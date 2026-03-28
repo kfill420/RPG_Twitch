@@ -1,6 +1,8 @@
 const { Server } = require("socket.io");
+const EntityManager = require("../services/entityManager");
 
 let io;
+let entityManagerInstance;
 const players = {}; // Objet pour stocker les joueurs : { socketId: { x, y, anim, flipX } }
 
 function initSocket(server) {
@@ -10,6 +12,8 @@ function initSocket(server) {
       methods: ["GET", "POST"]
     }
   });
+
+  entityManager = new EntityManager(io);
 
   io.on("connection", (socket) => {
     console.log(`[Network] Nouveau joueur connecté : ${socket.id}`);
@@ -40,6 +44,9 @@ function initSocket(server) {
         players[socket.id].flipX = movementData.flipX;
         players[socket.id].weapon = movementData.weapon;
 
+        const fullPlayerData = { ...movementData, playerId: socket.id };
+        entityManager.updatePlayerPos(socket.id, fullPlayerData);
+
         // Diffuser la mise à jour à tout le monde sauf à l'envoyeur
         socket.broadcast.emit("playerMoved", players[socket.id]);
       }
@@ -66,6 +73,18 @@ function initSocket(server) {
     socket.on("requestPlayers", () => {
         // On renvoie la liste complète à celui qui demande
         socket.emit("currentPlayers", players);
+    });
+
+    socket.on("hitSlime", (data) => {
+    const slime = entityManager.slimes[data.id];
+      if (slime && !slime.dead) {
+        slime.hp -= data.damage;
+        if (slime.hp <= 0) {
+          slime.dead = true;
+          setTimeout(() => { delete entityManager.slimes[data.id]; }, 50); 
+        }
+        io.emit("slimeStatUpdate", { id: data.id, hp: slime.hp, dead: slime.dead });
+      }
     });
   });
 }

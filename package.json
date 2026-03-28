@@ -4,7 +4,9 @@
   "description": "",
   "main": "index.js",
   "scripts": {
-    "test": "echo \"Error: no test specified\" && exit 1"
+    "dev:back": "cd backend && pnpm dev",
+    "dev:front": "cd frontend && pnpm dev",
+    "dev": "concurrently \"pnpm dev:back\" \"pnpm dev:front\""
   },
   "keywords": [],
   "author": "",
@@ -13,5 +15,8 @@
   "dependencies": {
     "dotenv": "^17.2.3",
     "fastify": "^5.7.0"
+  },
+  "devDependencies": {
+    "concurrently": "^9.2.1"
   }
 }
