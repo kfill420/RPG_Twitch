@@ -1,4 +1,3 @@
-// utils/EntityManager.js
 class EntityManager {
     constructor(io) {
         this.io = io;
