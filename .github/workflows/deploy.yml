@@ -20,6 +20,6 @@ jobs:
             cd ~/corehunter/backend
             git pull origin main
             # On reconstruit l'image et on relance le conteneur
-            sudo docker compose up --build -d
+            docker compose up --build -d
             # On nettoie les images orphelines pour économiser l'espace disque
-            sudo docker image prune -f
+            docker image prune -f
