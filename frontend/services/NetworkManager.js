@@ -31,10 +31,14 @@ class NetworkManager {
     }
 
     init(gameInstance) {
-        if (this.socket && this.socket.connected) return;
-        if (this.socket) this.socket.disconnect();
+        if (this.socket) {
+            this.socket.removeAllListeners();
+            this.socket.disconnect();
+        }
         
-        this.socket = io(this.url);
+        this.socket = io(this.url, {
+            autoConnect: true
+        });
 
         const getActiveGameScene = () => {
            return gameInstance.scene.getScene('GameScene');
@@ -73,7 +77,6 @@ class NetworkManager {
         });
 
         this.socket.on("slimeUpdate", (serverSlimes) => {
-            console.log("Slimes reçus du serveur:", Object.keys(serverSlimes).length);
             const scene = getActiveGameScene();
             if (scene && scene.sys.isActive()) {
                 scene.updateEnemiesFromServer(serverSlimes);
@@ -125,10 +128,12 @@ class NetworkManager {
 
     disconnect() {
         if (this.socket) {
+            this.socket.removeAllListeners();
             this.socket.disconnect();
             this.socket = null;
-            this.currentRoom = null;
         }
+        this.currentRoom = null;
+        this.pendingPlayers = null;
     }
 }
 

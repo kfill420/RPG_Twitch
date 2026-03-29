@@ -47,6 +47,15 @@ class EntityManager {
         }
     }
 
+    resetRoom(roomId) {
+        if (this.rooms[roomId]) {
+            this.rooms[roomId].slimes = {};
+            this.spawnInitialSlimes(roomId);
+            console.log(`[EntityManager] Room ${roomId} réinitialisée.`);
+            this.io.to(roomId).emit("slimeUpdate", this.rooms[roomId].slimes);
+        }
+    }
+
     update(delta) {
         const now = Date.now();
 
@@ -154,12 +163,17 @@ class EntityManager {
 
     removePlayer(socketId) {
         Object.keys(this.rooms).forEach(roomId => {
-            if (this.rooms[roomId].players[socketId]) {
-                delete this.rooms[roomId].players[socketId];
+            const room = this.rooms[roomId];
+            if (room.players[socketId]) {
+                delete room.players[socketId];
                 
-                // Si la room est vide, on reset les slimes ou on supprime la room
-                if (Object.keys(this.rooms[roomId].players).length === 0) {
-                    delete this.rooms[roomId]; 
+                // On vérifie le nombre de clés restantes dans l'objet
+                const count = Object.keys(room.players).length;
+                console.log(`[EntityManager] Joueurs restants dans ${roomId}: ${count}`);
+            
+                if (count === 0) {
+                    console.log(`[EntityManager] Room ${roomId} vide -> Suppression.`);
+                    delete this.rooms[roomId]; // C'est ici que le reset se produit
                 }
             }
         });

@@ -10,9 +10,6 @@ import PreloadScene from "./scenes/preloadScene.js";
 import SettingsScene from "./scenes/settingsScene.js";
 import UIScene from "./scenes/UIScene.js";
 import DeathScene from "./scenes/deathScene.js";
-import { networkManager } from "./services/NetworkManager.js";
-
-let webSocketEnable = true;
 
 // Configuration du jeu
 const config = {
@@ -38,7 +35,5 @@ const config = {
 };
 
 const game = new Phaser.Game(config);
-
-if (webSocketEnable) networkManager.init(game);
 
 export default game;

@@ -4,6 +4,7 @@
  */
 
 import MenuButton from "../components/ui/MenuButton.js";
+import { networkManager } from "../services/NetworkManager.js";
 
 export default class MenuScene extends Phaser.Scene {
     constructor() {
@@ -79,7 +80,7 @@ export default class MenuScene extends Phaser.Scene {
         });
 
         this.btnMulti = new MenuButton(this, width / 2, height * 0.62, 'MULTIPLAYER', false, () => {
-            // this.cameras.main.shake(200, 0.005);
+            networkManager.init(this.game);
             this.scene.start('PreloadScene', { mode: 'multi' });
         });
 

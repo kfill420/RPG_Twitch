@@ -36,6 +36,12 @@ function initSocket(server) {
         socket.emit("currentPlayers", entityManager.rooms[roomId].players);
     });
 
+    socket.on("restartGame", (roomId) => {
+        console.log(`[Server] Réinitialisation de la salle : ${roomId}`);
+        entityManager.resetRoom(roomId);
+        io.to(roomId).emit("slimeUpdate", entityManager.rooms[roomId].slimes);
+    });
+
     // 2. Envoyer la liste de TOUS les joueurs actuels au nouveau venu
     socket.emit("currentPlayers", players);
 
@@ -65,6 +71,11 @@ function initSocket(server) {
         playerId: socket.id,
         ...attackData
       });
+    });
+
+    socket.on("leaveGameManual", () => {
+        console.log(`[Server] Départ manuel du joueur : ${socket.id}`);
+        entityManager.removePlayer(socket.id);
     });
 
     // 6. Déconnexion
