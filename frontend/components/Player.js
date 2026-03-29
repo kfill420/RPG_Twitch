@@ -11,7 +11,7 @@ export default class Player {
     constructor(scene, x, y) {
         this.scene = scene;
 
-        // --- 1. CONFIGURATION PHYSIQUE (Matter.js) ---
+        // Configuration physiqye
         this.body = scene.matter.add.circle(x, y + 10, 5, {
             isSensor: false,
             inertia: Infinity,
@@ -23,11 +23,12 @@ export default class Player {
             }
         });
 
-        // --- 2. ÉTATS & STATISTIQUES ---
+        // Etats et Stats
         this.hp = 10;
         this.maxhp = 10;
         this.stamina = 10;
         this.maxStamina = 10;
+        this.exhaustionTimer = 0;
         
         this.isAttacking = false;
         this.isSliding = false;
@@ -49,18 +50,15 @@ export default class Player {
         
         // Récupération
         this.lastDamageTime = 0;
-        this.regenRate = 0.0001; // Régénération par milliseconde
-        this.regenDelay = 10000; // 10 secondes sans dégâts avant de regen
+        this.regenRate = 0.0001;
+        this.regenDelay = 10000;
 
         this.activeHitbox = null;
 
-        // --- 3. INITIALISATION VISUELLE ---
+        // Initialisation visuelle
         this.createSprite(x, y);
     }
 
-    /**
-     * Crée les sprites et génère les animations pour le héros et son arme
-     */
     createSprite(x, y) {
         // Sprite du Héros
         this.sprite = this.scene.add.sprite(x, y, "hero-idle-0").setScale(0.04);
@@ -73,9 +71,6 @@ export default class Player {
 
         const anims = this.scene.anims;
 
-        /**
-         * Helper pour créer des animations synchronisées
-         */
         const createDoubleAnim = (key, length, rate, repeat = -1) => {
             // Animation du Héros
             if (!anims.exists(key)) {
@@ -122,22 +117,20 @@ export default class Player {
         this.playDualAnim("idle");
     }
 
-    /**
-     * Boucle principale du joueur (mouvement, regen, sync visuelle)
-     */
+
     update(cursors, keys, delta, collisionBodies) {
         if (this.isDead) return;
 
         const pointer = this.scene.input.activePointer;
         pointer.updateWorldPoint(this.scene.cameras.main);
 
-        // --- 1. RÉGÉNÉRATION HP ---
+        // Regen HP
         const currentTime = this.scene.time.now;
         if (currentTime - this.lastDamageTime > this.regenDelay && this.hp < this.maxhp) {
             this.hp = Math.min(this.maxhp, this.hp + (this.regenRate * delta));
         }
 
-        // --- 2. DÉPLACEMENTS & ACTIONS ---
+        // Déplacements & actions
         let vx = 0, vy = 0;
 
         if (!this.isStunned) {
@@ -153,6 +146,10 @@ export default class Player {
 
             // Calcul des vecteurs de vitesse final
             let finalVx, finalVy, currentSpeed;
+
+            const isExhausted = (this.scene.time.now - this.exhaustionTimer) < 1000;
+            const canRun = keys.shift.isDown && this.stamina > 0 && !isExhausted;
+
             if (this.isSliding) {
                 finalVx = this.slideVec.x; 
                 finalVy = this.slideVec.y;
@@ -160,15 +157,28 @@ export default class Player {
                 this.slideSpeed *= 0.975;
                 if (this.slideSpeed < 0.03) { this.isSliding = false; this.slideSpeed = 0; }
             } else {
-                const isRunning = keys.shift.isDown && this.stamina > this.staminaRunCost;
-                const speed = isRunning ? 0.10 : 0.05;
+                const speed = canRun ? 0.07 : 0.04;
                 currentSpeed = speed * delta * (this.isAttacking ? 0.2 : 1.0);
                 finalVx = vx; 
                 finalVy = vy;
                 
                 // Gestion Stamina course
-                if (isRunning && (vx !== 0 || vy !== 0)) this.stamina -= 0.003 * delta;
-                else this.stamina = Math.min(this.maxStamina, this.stamina + 0.01 * delta);
+                if (canRun && (vx !== 0 || vy !== 0)) {
+                    this.stamina -= 0.003 * delta;
+                    if (this.stamina <= 0) {
+                        this.stamina = 0;
+                        this.exhaustionTimer = this.scene.time.now; // On lance le chrono de 1s
+                        this.sprite.setTint(0x888888); // Optionnel: petit feedback visuel de fatigue
+                        this.scene.time.delayedCall(1000, () => {
+                            if (!this.isDead && !this.isInvulnerable) this.sprite.clearTint();
+                        });
+                    }
+                }
+                else {
+                    if (!isExhausted) {
+                        this.stamina = Math.min(this.maxStamina, this.stamina + 0.004 * delta);
+                    }
+                }
             }
 
             // Application de la physique avec détection de collision manuelle
@@ -187,8 +197,7 @@ export default class Player {
             // Gestion des animations de mouvement
             if (!this.isSliding && !this.isAttacking) {
                 if (vx !== 0 || vy !== 0) {
-                    const isRunning = keys.shift.isDown && this.stamina > this.staminaRunCost + 1;
-                    const anim = isRunning ? "run" : "walk";
+                    const anim = canRun ? "run" : "walk";
                     this.playDualAnim(anim);
                     this.setDualFlip(vx < 0);
                     // Bruitages de pas
@@ -201,7 +210,7 @@ export default class Player {
             }
         }
 
-        // --- 3. SYNCHRONISATION VISUELLE
+        // Synchronisation visuelle
         this.sprite.x = this.body.position.x;
         this.sprite.y = this.body.position.y;
         
@@ -210,25 +219,25 @@ export default class Player {
         this.weaponSprite.depth = this.sprite.depth - 0.1;
         this.weaponSprite.setFlipX(this.sprite.flipX);
 
-        // Ajustement visuel pour la batte de baseball au repos
         if (!this.isAttacking && this.currentWeapon === 'baseball') {
             this.weaponSprite.y -= 6;
         }
 
-        // --- À AJOUTER À LA FIN DU UPDATE ---
         if (this.scene.gameMode === 'multi' && !this.isDead) {
             const currentData = {
                 x: Math.round(this.sprite.x),
                 y: Math.round(this.sprite.y),
                 anim: this.sprite.anims.currentAnim?.key,
                 flipX: this.sprite.flipX,
-                weapon: this.currentWeapon
+                weapon: this.currentWeapon,
+                isDead: this.isDead
             };
         
             // On n'envoie que si quelque chose a changé (position ou animation)
             if (this.lastSentData?.x !== currentData.x || 
                 this.lastSentData?.y !== currentData.y || 
-                this.lastSentData?.anim !== currentData.anim) {
+                this.lastSentData?.anim !== currentData.anim ||
+                this.lastSentData?.isDead !== currentData.isDead) {
                 
                 networkManager.sendAction('playerMovement', currentData);
                 this.lastSentData = currentData;
@@ -236,7 +245,7 @@ export default class Player {
         }
     }
 
-    //Attaque avec l'arme actuelle vers la souris
+    // Attaque avec l'arme actuelle vers la souris
     attack() {
         if (this.isAttacking || this.isStunned || this.isDead) return;
         const config = WEAPON_CONFIG[this.currentWeapon];
@@ -386,6 +395,17 @@ export default class Player {
         if (this.isDead) return;
         this.isDead = true;
 
+        if (this.scene.gameMode === 'multi') {
+            networkManager.sendAction('playerMovement', {
+                x: Math.round(this.sprite.x),
+                y: Math.round(this.sprite.y),
+                anim: 'idle', // ou une anim de mort
+                flipX: this.sprite.flipX,
+                weapon: this.currentWeapon,
+                isDead: true
+            });
+        }
+
         if (this.body) {
             this.body.collisionFilter.category = 0;
             this.scene.matter.body.setVelocity(this.body, { x: 0, y: 0 });
@@ -423,7 +443,7 @@ export default class Player {
         });
     }
 
-    //Joue simultanément l'animation du corps et de l'arme
+    // Joue simultanément l'animation du corps et de l'arme
     playDualAnim(key) {
         this.sprite.play(key, true);
         if (this.currentWeapon) {

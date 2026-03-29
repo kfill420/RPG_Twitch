@@ -32,11 +32,6 @@ export default class Slime {
         this.isHurt = false;
         this.isDead = false;
         this.isAttacking = false;
-        // this.state = "WANDER"; // WANDER ou CHASE
-        
-        // this.detectionRange = 100;
-        // this.nextDecisionTime = 0;
-        // this.wanderVec = new Phaser.Math.Vector2();
         this.lastDir = 'down';
 
         // --- 3. PHYSIQUE (Matter.js) ---
@@ -52,7 +47,6 @@ export default class Slime {
 
         this.targetX = x;
         this.targetY = y;
-
         this.idleTimer = 0;
         this.lastDirChangeTime = 0;
     }
@@ -115,7 +109,7 @@ export default class Slime {
     update() {
         if (this.isDead || !this.sprite || !this.sprite.body) return;
 
-        const lerpFactor = 0.01;
+        const lerpFactor = 0.15;
         this.sprite.x = Phaser.Math.Linear(this.sprite.x, this.targetX, lerpFactor);
         this.sprite.y = Phaser.Math.Linear(this.sprite.y, this.targetY, lerpFactor);
     }
@@ -136,12 +130,11 @@ export default class Slime {
     
     if (serverData.isMoving) {
         this.idleTimer = 0;
-        // On envoie le vecteur de direction globale
         this.updateDirectionalAnim({ x: dx, y: dy }, 'run');
         this.handleMoveSounds();
     } else {
         this.idleTimer++;
-        if (this.idleTimer > 10) { 
+        if (this.idleTimer > 5) { 
             this.updateDirectionalAnim(null, 'idle');
         }
     }
@@ -166,18 +159,12 @@ export default class Slime {
         const animKey = `slime${this.type}-${type}-${dir}`;
         const currentAnim = this.sprite.anims.currentAnim;
 
-        // 2. CONDITION DE CHANGEMENT (L'OBLIGATION D'ATTENTE)
-        // On ne change l'animation QUE SI :
-        // - On n'a pas d'animation en cours
-        // - OU l'animation demandée est différente de l'actuelle ET on a dépassé 50% de la progression
-
+        // 2. CONDITION DE CHANGEMENT
         let canChange = false;
         if (!currentAnim || this.sprite.anims.getName() !== animKey) {
             if (!currentAnim) {
                 canChange = true;
             } else {
-                // On force l'attente d'au moins la moitié de l'animation de course (0.5 = 50%)
-                // Cela évite que le sprite change de sens frénétiquement
                 if (this.sprite.anims.getProgress() >= 0.5) {
                     canChange = true;
                 }
@@ -228,7 +215,7 @@ export default class Slime {
 
     this.lastDir = dir;
 
-    // 3. On lance l'animation d'attaque (le "true" force le redémarrage)
+    // 3. On lance l'animation d'attaque
     this.sprite.play(`slime${this.type}-attack-${dir}`, true);
 
     // 4. Gestion de l'impact (dégâts/sons)
@@ -253,7 +240,7 @@ export default class Slime {
 
     this.sprite.on('animationupdate', onUpdate);
 
-    // 5. IMPORTANT : On ne libère isAttacking que quand l'animation est TOTALEMENT terminée
+    // 5. On ne libère isAttacking que quand l'animation est TOTALEMENT terminée
     this.sprite.once('animationcomplete', (anim) => {
         if (anim.key.includes('attack')) {
             this.isAttacking = false;
@@ -264,11 +251,9 @@ export default class Slime {
     takeDamage(amount) {
         if (this.isHurt || this.isDead) return;
 
-        if (this.scene.gameMode === 'multi') {
-            networkManager.socket.emit("hitSlime", { id: this.id, damage: amount });
-        }
+        if (this.scene.gameMode === 'multi')
+            networkManager.sendHit(this.id, amount);
 
-        // this.hp -= amount;
         this.isHurt = true;
         this.sprite.setTint(0xff0000);
 

@@ -3,6 +3,9 @@
  * @description Gère l'interface des réglages (Volume et Remapping des touches).
  * Cette scène est généralement lancée en mode "Overlay" par-dessus la GameScene.
  */
+
+import { networkManager } from '../services/NetworkManager.js';
+
 export default class SettingsScene extends Phaser.Scene {
     constructor() {
         super({ key: 'SettingsScene' });
@@ -144,7 +147,14 @@ export default class SettingsScene extends Phaser.Scene {
         }).setOrigin(0.5).setInteractive({ useHandCursor: true });
 
         btnQuit.on('pointerdown', () => {
-            // Nettoyage complet des scènes actives
+            console.log("Tentative de quitter via NetworkManager...");
+
+            if (networkManager && networkManager.socket) {
+                networkManager.socket.emit("leaveGameManual");
+                networkManager.socket.disconnect();
+                networkManager.pendingPlayers = null;
+            } 
+
             const scenesToStop = ['GameScene', 'UIScene', 'SettingsScene'];
             scenesToStop.forEach(s => {
                 if (this.scene.isActive(s)) this.scene.stop(s);
