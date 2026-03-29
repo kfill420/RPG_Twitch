@@ -28,6 +28,7 @@ export default class Player {
         this.maxhp = 10;
         this.stamina = 10;
         this.maxStamina = 10;
+        this.exhaustionTimer = 0;
         
         this.isAttacking = false;
         this.isSliding = false;
@@ -145,6 +146,10 @@ export default class Player {
 
             // Calcul des vecteurs de vitesse final
             let finalVx, finalVy, currentSpeed;
+
+            const isExhausted = (this.scene.time.now - this.exhaustionTimer) < 1000;
+            const canRun = keys.shift.isDown && this.stamina > 0 && !isExhausted;
+
             if (this.isSliding) {
                 finalVx = this.slideVec.x; 
                 finalVy = this.slideVec.y;
@@ -152,15 +157,28 @@ export default class Player {
                 this.slideSpeed *= 0.975;
                 if (this.slideSpeed < 0.03) { this.isSliding = false; this.slideSpeed = 0; }
             } else {
-                const isRunning = keys.shift.isDown && this.stamina > this.staminaRunCost;
-                const speed = isRunning ? 0.10 : 0.05;
+                const speed = canRun ? 0.07 : 0.04;
                 currentSpeed = speed * delta * (this.isAttacking ? 0.2 : 1.0);
                 finalVx = vx; 
                 finalVy = vy;
                 
                 // Gestion Stamina course
-                if (isRunning && (vx !== 0 || vy !== 0)) this.stamina -= 0.003 * delta;
-                else this.stamina = Math.min(this.maxStamina, this.stamina + 0.01 * delta);
+                if (canRun && (vx !== 0 || vy !== 0)) {
+                    this.stamina -= 0.003 * delta;
+                    if (this.stamina <= 0) {
+                        this.stamina = 0;
+                        this.exhaustionTimer = this.scene.time.now; // On lance le chrono de 1s
+                        this.sprite.setTint(0x888888); // Optionnel: petit feedback visuel de fatigue
+                        this.scene.time.delayedCall(1000, () => {
+                            if (!this.isDead && !this.isInvulnerable) this.sprite.clearTint();
+                        });
+                    }
+                }
+                else {
+                    if (!isExhausted) {
+                        this.stamina = Math.min(this.maxStamina, this.stamina + 0.004 * delta);
+                    }
+                }
             }
 
             // Application de la physique avec détection de collision manuelle
@@ -179,8 +197,7 @@ export default class Player {
             // Gestion des animations de mouvement
             if (!this.isSliding && !this.isAttacking) {
                 if (vx !== 0 || vy !== 0) {
-                    const isRunning = keys.shift.isDown && this.stamina > this.staminaRunCost + 1;
-                    const anim = isRunning ? "run" : "walk";
+                    const anim = canRun ? "run" : "walk";
                     this.playDualAnim(anim);
                     this.setDualFlip(vx < 0);
                     // Bruitages de pas

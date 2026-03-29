@@ -71,7 +71,6 @@ class EntityManager {
                         closestPlayer = p;
                     }
                 });
-                console.log(closestPlayer);
 
                 // 2. Logique d'état
                 if (closestPlayer && minDist < slime.detectionRange) {
