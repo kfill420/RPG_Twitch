@@ -52,7 +52,7 @@ class EntityManager {
 
         Object.keys(this.rooms).forEach(roomId => {
             const room = this.rooms[roomId];
-            const playersInRoom = Object.values(room.players);
+            const playersInRoom = Object.values(room.players).filter(p => p.isDead !== true);
 
             // Si la room ne contient plus de joueur on peut la supprimer
             if (playersInRoom.length === 0) return;
@@ -71,6 +71,7 @@ class EntityManager {
                         closestPlayer = p;
                     }
                 });
+                console.log(closestPlayer);
 
                 // 2. Logique d'état
                 if (closestPlayer && minDist < slime.detectionRange) {

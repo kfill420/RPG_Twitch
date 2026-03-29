@@ -41,7 +41,6 @@ class NetworkManager {
         };
 
         this.socket.on("currentPlayers", (players) => {
-            console.log(players);
             const scene = getActiveGameScene();
             if (scene && scene.sys.isActive()) {
                 scene.spawnRemotePlayers(players);
@@ -98,7 +97,6 @@ class NetworkManager {
         this.socket.on("allSlimesReset", (serverSlimes) => {
             const scene = getActiveGameScene();
             if (scene && scene.sys.isActive()) {
-                // Cette méthode doit déjà exister dans ta GameScene pour nettoyer les anciens sprites
                 scene.updateEnemiesFromServer(serverSlimes);
             }
         });
@@ -128,7 +126,7 @@ class NetworkManager {
     disconnect() {
         if (this.socket) {
             this.socket.disconnect();
-            this.socket = null; // Important pour permettre une réinitialisation future
+            this.socket = null;
             this.currentRoom = null;
         }
     }

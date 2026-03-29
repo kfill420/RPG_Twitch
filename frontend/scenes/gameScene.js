@@ -41,23 +41,16 @@ export default class GameScene extends Phaser.Scene {
         this._setupCollisionEvents();
 
         if (this.gameMode === 'multi') {
-    // 1. On rejoint la room (indispensable pour recevoir les slimes de cette room)
-    networkManager.joinRoom("default"); // Ou l'ID de ta room
+            networkManager.joinRoom("default");
 
-    // 2. On traite les joueurs qui sont arrivés pendant le chargement
-    if (networkManager.pendingPlayers) {
-        this.spawnRemotePlayers(networkManager.pendingPlayers);
-        networkManager.pendingPlayers = null;
-    }
-    
-    // 3. On demande explicitement les joueurs (au cas où)
-    networkManager.requestCurrentPlayers();
+            if (networkManager.pendingPlayers) {
+                this.spawnRemotePlayers(networkManager.pendingPlayers);
+                networkManager.pendingPlayers = null;
+            }
+            networkManager.requestCurrentPlayers();
+            networkManager.socket.emit("requestSlimes"); 
+        }
 
-    // 4. On force une demande de mise à jour des slimes si le serveur ne l'envoie pas
-    networkManager.socket.emit("requestSlimes"); 
-}
-
-        // On récupère le NetworkManager (importé ou global selon ta structure)
         if (this.gameMode === 'multi') {
             if (networkManager.pendingPlayers) {
                 this.spawnRemotePlayers(networkManager.pendingPlayers);
@@ -201,8 +194,6 @@ export default class GameScene extends Phaser.Scene {
     _updateEnemies() {
         this.enemies = this.enemies.filter(enemy => {
             if (enemy.isDead) {
-                // On le garde dans la liste seulement si le sprite existe encore (pendant l'anim)
-                // Mais on ne l'update plus
                 return enemy.sprite && enemy.sprite.active;
             }
 
@@ -224,14 +215,12 @@ export default class GameScene extends Phaser.Scene {
 
             let slime = this.enemies.find(e => e.id === data.id);
             
-            // Si le slime n'existe pas encore localement, on le crée
             if (!slime) {
                 slime = new Slime(this, data.x, data.y, data.type, data.id);
                 this.enemies.push(slime);
                 if (this.sortingGroup) this.sortingGroup.add(slime.sprite);
             }
         
-            // On synchronise (mouvement + animations)
             slime.syncFromServer(data);
         });
     }
@@ -243,7 +232,6 @@ export default class GameScene extends Phaser.Scene {
         if (data.dead) {
             slime.die();
         } else {
-            // Déclenche l'effet visuel de dégâts
             slime.sprite.setTint(0xff0000);
             this.time.delayedCall(200, () => slime.sprite.clearTint());
         }
@@ -284,47 +272,7 @@ export default class GameScene extends Phaser.Scene {
         });
     }
 
-    // _setupNetworkEvents() {
-    //     // 1. Recevoir la liste des joueurs déjà présents
-    //     networkManager.socket.on("currentPlayers", (players) => {
-    //         Object.keys(players).forEach((id) => {
-    //             if (id !== networkManager.socket.id) {
-    //                 this.addRemotePlayer(players[id]);
-    //             }
-    //         });
-    //     });
-    
-    //     // 2. Un nouveau joueur arrive
-    //     networkManager.socket.on("newPlayer", (playerInfo) => {
-    //         this.addRemotePlayer(playerInfo);
-    //     });
-    
-    //     // 3. Un joueur bouge
-    //     networkManager.socket.on("playerMoved", (playerInfo) => {
-    //         const remote = this.otherPlayers.get(playerInfo.playerId);
-    //         if (remote) {
-    //             remote.setPosition(playerInfo.x, playerInfo.y);
-    //             if (playerInfo.anim) remote.play(playerInfo.anim, true);
-    //             // Gestion du flip (miroir) selon la direction
-    //             remote.setFlipX(playerInfo.flipX);
-    //         }
-    //     });
-    
-    //     // 4. Un joueur quitte
-    //     networkManager.socket.on("userDisconnected", (playerId) => {
-    //         const remote = this.otherPlayers.get(playerId);
-    //         if (remote) {
-    //             remote.destroy();
-    //             this.otherPlayers.delete(playerId);
-    //         }
-    //     });
-    // }
-    
-    // --- À ajouter/modifier dans GameScene.js ---
-    
-    /**
-     * Appelé par NetworkManager pour charger tous les joueurs d'un coup
-     */
+    // Appelé par NetworkManager pour charger tous les joueurs d'un coup
     spawnRemotePlayers(players) {
         Object.keys(players).forEach((id) => {
             if (id !== networkManager.socket.id) {
@@ -333,13 +281,10 @@ export default class GameScene extends Phaser.Scene {
         });
     }
     
-    /**
-     * Appelé pour ajouter UN seul joueur
-     */
+    // Appelé pour ajouter UN seul joueur
     addRemotePlayer(info) {
         if (this.otherPlayers.has(info.playerId)) return;
     
-        // Utilise une texture par défaut valide (ex: 'hero-idle-0' ou celle du info.anim)
         const remote = this.matter.add.sprite(info.x, info.y, 'hero-idle-0');
         remote.setScale(0.04);
         remote.setOrigin(0.5, 0.8);
@@ -351,9 +296,7 @@ export default class GameScene extends Phaser.Scene {
         this.otherPlayers.set(info.playerId, remote);
     }
     
-    /**
-     * Appelé pour mettre à jour la position et l'animation
-     */
+    // Appelé pour mettre à jour la position et l'animation
     updateRemotePlayer(playerInfo) {
         const remote = this.otherPlayers.get(playerInfo.playerId);
         if (remote) {
@@ -365,9 +308,7 @@ export default class GameScene extends Phaser.Scene {
         }
     }
     
-    /**
-     * Appelé quand un joueur quitte
-     */
+    //Appelé quand un joueur quitte
     removeRemotePlayer(playerId) {
         const remote = this.otherPlayers.get(playerId);
         if (remote) {

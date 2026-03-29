@@ -11,7 +11,7 @@ export default class Player {
     constructor(scene, x, y) {
         this.scene = scene;
 
-        // --- 1. CONFIGURATION PHYSIQUE ---
+        // Configuration physiqye
         this.body = scene.matter.add.circle(x, y + 10, 5, {
             isSensor: false,
             inertia: Infinity,
@@ -23,7 +23,7 @@ export default class Player {
             }
         });
 
-        // --- 2. ÉTATS & STATISTIQUES ---
+        // Etats et Stats
         this.hp = 10;
         this.maxhp = 10;
         this.stamina = 10;
@@ -54,7 +54,7 @@ export default class Player {
 
         this.activeHitbox = null;
 
-        // --- 3. INITIALISATION VISUELLE ---
+        // Initialisation visuelle
         this.createSprite(x, y);
     }
 
@@ -123,13 +123,13 @@ export default class Player {
         const pointer = this.scene.input.activePointer;
         pointer.updateWorldPoint(this.scene.cameras.main);
 
-        // --- 1. RÉGÉNÉRATION HP ---
+        // Regen HP
         const currentTime = this.scene.time.now;
         if (currentTime - this.lastDamageTime > this.regenDelay && this.hp < this.maxhp) {
             this.hp = Math.min(this.maxhp, this.hp + (this.regenRate * delta));
         }
 
-        // --- 2. DÉPLACEMENTS & ACTIONS ---
+        // Déplacements & actions
         let vx = 0, vy = 0;
 
         if (!this.isStunned) {
@@ -193,7 +193,7 @@ export default class Player {
             }
         }
 
-        // --- 3. SYNCHRONISATION VISUELLE
+        // Synchronisation visuelle
         this.sprite.x = this.body.position.x;
         this.sprite.y = this.body.position.y;
         
@@ -212,13 +212,15 @@ export default class Player {
                 y: Math.round(this.sprite.y),
                 anim: this.sprite.anims.currentAnim?.key,
                 flipX: this.sprite.flipX,
-                weapon: this.currentWeapon
+                weapon: this.currentWeapon,
+                isDead: this.isDead
             };
         
             // On n'envoie que si quelque chose a changé (position ou animation)
             if (this.lastSentData?.x !== currentData.x || 
                 this.lastSentData?.y !== currentData.y || 
-                this.lastSentData?.anim !== currentData.anim) {
+                this.lastSentData?.anim !== currentData.anim ||
+                this.lastSentData?.isDead !== currentData.isDead) {
                 
                 networkManager.sendAction('playerMovement', currentData);
                 this.lastSentData = currentData;
@@ -226,7 +228,7 @@ export default class Player {
         }
     }
 
-    //Attaque avec l'arme actuelle vers la souris
+    // Attaque avec l'arme actuelle vers la souris
     attack() {
         if (this.isAttacking || this.isStunned || this.isDead) return;
         const config = WEAPON_CONFIG[this.currentWeapon];
@@ -376,6 +378,17 @@ export default class Player {
         if (this.isDead) return;
         this.isDead = true;
 
+        if (this.scene.gameMode === 'multi') {
+            networkManager.sendAction('playerMovement', {
+                x: Math.round(this.sprite.x),
+                y: Math.round(this.sprite.y),
+                anim: 'idle', // ou une anim de mort
+                flipX: this.sprite.flipX,
+                weapon: this.currentWeapon,
+                isDead: true // On force le true ici
+            });
+        }
+
         if (this.body) {
             this.body.collisionFilter.category = 0;
             this.scene.matter.body.setVelocity(this.body, { x: 0, y: 0 });
@@ -413,7 +426,7 @@ export default class Player {
         });
     }
 
-    //Joue simultanément l'animation du corps et de l'arme
+    // Joue simultanément l'animation du corps et de l'arme
     playDualAnim(key) {
         this.sprite.play(key, true);
         if (this.currentWeapon) {
