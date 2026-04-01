@@ -88,19 +88,19 @@ export default class LobbyScene extends Phaser.Scene {
         const handlePaste = (event) => {
             // On ne traite le coller que si cette scène est active
             if (!this.scene.isActive("LobbyScene")) return;
-                
+
             const pasteData = (event.clipboardData || window.clipboardData).getData('text');
-            // On nettoie la chaîne : on garde les 6 premiers caractères alphanumériques
+            // On nettoie la chaîne
             const cleanData = pasteData.toUpperCase().replace(/[^A-Z0-9]/g, '').slice(0, 6);
-                
+
             if (cleanData) {
                 this.inputText = cleanData;
                 this._updateCodeDisplay();
             }
         };
-        
+
         window.addEventListener('paste', handlePaste);
-        
+
         // Nettoyage de l'événement quand on quitte la scène
         this.events.once('shutdown', () => {
             window.removeEventListener('paste', handlePaste);
@@ -134,14 +134,14 @@ export default class LobbyScene extends Phaser.Scene {
         // Mise à jour du titre du salon
         this.roomTitleText.setText(`CODE : ${networkManager.currentRoom}`);
 
-        // Nettoyage des anciens noms (pour éviter les superpositions)
+        // Nettoyage des anciens noms
         if (this.playerNamesGroup) {
             this.playerNamesGroup.clear(true, true);
         } else {
             this.playerNamesGroup = this.add.group();
         }
 
-        // Paramètres de la grille (Le "Flex Grid")
+        // Paramètres de la grille
         const columns = 3;
         const colWidth = 180;
         const rowHeight = 40;

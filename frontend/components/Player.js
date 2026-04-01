@@ -356,7 +356,7 @@ export default class Player {
         if (this.isInvulnerable || this.hp <= 0 || this.isDead) return;
 
         this.lastDamageTime = this.scene.time.now;
-        this.hp -= amount;
+        this.hp = Math.max(0, this.hp - amount);
         this.isInvulnerable = true;
         this.isStunned = true;
 
