@@ -40,7 +40,7 @@ export default class Slime {
         this.sprite.setBody({ type: 'circle', radius: 7 }); 
         this.sprite.setFixedRotation();
         // this.sprite.setFrictionAir(0.1);
-        this.sprite.setSensor(true);
+        this.sprite.setSensor(false);
         this.sprite.body.label = 'enemy'; 
 
         this.createAnims();

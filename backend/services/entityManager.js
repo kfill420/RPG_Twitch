@@ -255,7 +255,7 @@ class EntityManager {
                     const isBlocked = this.isColliding(slime.x + finalVec.x * 20, slime.y + finalVec.y * 20)
 
                     if (isBlocked && slime.state === "CHASE") {
-                        const angleToTest = [Math.PI / 4, -Math.PI / 4, Math.PI / 2, -Math.PI / 2];
+                        const angleToTest = [Math.PI / 4, -Math.PI / 4, Math.PI / 2, -Math.PI / 2, Math.PI / 1.5, -Math.PI / 1.5];
                         let foundPath = false;
 
                         for (let angleOffSet of angleToTest) {
@@ -263,11 +263,18 @@ class EntityManager {
                             const testX = Math.cos(currentAngle + angleOffSet);
                             const testY = Math.sin(currentAngle + angleOffSet);
 
-                            if (!this.isColliding(slime.x + testX * 25, slime.y + testY * 25)) {
+                            if (!this.isColliding(slime.x + testX * 30, slime.y + testY * 30)) {
                                 finalVec.x = testX;
                                 finalVec.y = testY;
                                 foundPath = true;
                                 break;
+                            }
+                        }
+                        if (!foundPath) {
+                            if (!this.isColliding(slime.x + moveVec.x * 25, slime.y)) {
+                                finalVec.y = 0; // On annule Y pour longer horizontalement
+                            } else if (!this.isColliding(slime.x, slime.y + moveVec.y * 25)) {
+                                finalVec.x = 0; // On annule X pour longer verticalement
                             }
                         }
                     }
