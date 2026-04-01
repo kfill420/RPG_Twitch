@@ -37,7 +37,7 @@ export default class Slime {
         // --- 3. PHYSIQUE (Matter.js) ---
         this.sprite = scene.matter.add.sprite(x, y, `slime${type}-idle`, 0);
         this.sprite.setScale(0.8);
-        // this.sprite.setBody({ type: 'circle', radius: 7 }); 
+        this.sprite.setBody({ type: 'circle', radius: 7 }); 
         this.sprite.setFixedRotation();
         // this.sprite.setFrictionAir(0.1);
         this.sprite.setSensor(true);

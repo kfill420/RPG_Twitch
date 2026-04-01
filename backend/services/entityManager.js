@@ -10,7 +10,6 @@ class EntityManager {
     }
 
     init() {
-        // Boucle à 30 FPS
         setInterval(() => this.update(33), 33);
     }
 
@@ -46,11 +45,16 @@ class EntityManager {
         // On garde les calques de tuiles habituels
         this.obstacleLayers = map.layers.filter(l => l.name.startsWith("Obstacle") && l.data);
 
-        // 2. On récupère les objets
+        // On récupère les objets
         map.layers.forEach(layer => {
             if (layer.type === "objectgroup" && (layer.name === "Bushes" || layer.name.startsWith("Obstacle"))) {
                 layer.objects.forEach(obj => {
-                    this.staticObjects.push(obj);
+                    const hasTileCollision = obj.gid && this.tileCollisions[String(obj.gid)];
+                    const isManualShape = !obj.gid && (obj.width > 0 && obj.height > 0);
+
+                    if (hasTileCollision || isManualShape) {
+                        this.staticObjects.push(obj);
+                    }
                 });
             }
         });
@@ -80,19 +84,31 @@ class EntityManager {
                     });
                     if (collision) return true;
                 } else {
-                    // Si GID détecté sur calque "Obstacle" mais pas de forme : ON BLOQUE TOUT
                     return true; 
                 }
             }
         }
 
-        // OBJECT LAYERS (Bushes, Arbres libres)
+        // OBJECT LAYERS 
         for (const obj of this.staticObjects) {
-            let objY = obj.gid ? obj.y - obj.height : obj.y;
-
-            if (x >= obj.x && x <= obj.x + obj.width &&
-                y >= objY && y <= objY + obj.height) {
-                return true;
+            if (obj.gid) {
+                const shapes = this.tileCollisions[String(obj.gid)];
+                if (shapes) {
+                    // Calcul de la position de base
+                    const baseX = obj.x;
+                    const baseY = obj.y - obj.height;
+                
+                    const collision = shapes.some(shape => {
+                        return x >= baseX + shape.x && x <= baseX + shape.x + shape.width &&
+                               y >= baseY + shape.y && y <= baseY + shape.y + shape.height;
+                    });
+                    if (collision) return true;
+                }
+            } else {
+                if (x >= obj.x && x <= obj.x + obj.width &&
+                    y >= obj.y && y <= obj.y + obj.height) {
+                    return true;
+                }
             }
         }
 
@@ -158,7 +174,7 @@ class EntityManager {
             Object.values(room.slimes).forEach(slime => {
                 if (slime.dead || slime.isAttacking) return;
 
-                // 1. Trouver le joueur le plus proche
+                // Trouver le joueur le plus proche
                 let closestPlayer = null;
                 let minDist = Infinity;
                 
@@ -170,7 +186,7 @@ class EntityManager {
                     }
                 });
 
-                // 2. Logique d'état
+                // Logique d'état
                 if (closestPlayer && minDist < slime.detectionRange) {
                     slime.state = "CHASE";
                 } else {
@@ -198,7 +214,7 @@ class EntityManager {
                     return;
                 }
 
-                // 3. Calcul du mouvement
+                // Calcul du mouvement
                 let moveVec = { x: 0, y: 0 };
                 let currentSpeed = slime.stats.speed;
 
@@ -232,7 +248,7 @@ class EntityManager {
                     moveVec = slime.wanderVec;
                 }
 
-                // 4. Application du mouvement
+                // Application du mouvement
                 if (moveVec.x !== 0 || moveVec.y !== 0) {
                     let finalVec = { x: moveVec.x, y: moveVec.y };
 
@@ -251,7 +267,7 @@ class EntityManager {
                                 finalVec.x = testX;
                                 finalVec.y = testY;
                                 foundPath = true;
-                                break; // On a trouvé une direction dégagée !
+                                break;
                             }
                         }
                     }
