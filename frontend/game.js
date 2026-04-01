@@ -10,6 +10,7 @@ import PreloadScene from "./scenes/preloadScene.js";
 import SettingsScene from "./scenes/settingsScene.js";
 import UIScene from "./scenes/UIScene.js";
 import DeathScene from "./scenes/deathScene.js";
+import LobbyScene from "./scenes/lobbyScene.js";
 
 // Configuration du jeu
 const config = {
@@ -31,7 +32,7 @@ const config = {
     antialias: false,
     roundPixels: true
   },
-  scene: [MenuScene, PreloadScene, GameScene, UIScene, SettingsScene, DeathScene]
+  scene: [MenuScene, PreloadScene, LobbyScene, GameScene, UIScene, SettingsScene, DeathScene]
 };
 
 const game = new Phaser.Game(config);

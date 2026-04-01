@@ -11,16 +11,48 @@ class NetworkManager {
         this.url = isLocal ? "http://localhost:3001" : "https://corehunter.alexis-vignot.fr";
         this.pendingPlayers = null;
         this.currentRoom = null;
+        this.roomPlayers = [];
     }
 
-    joinRoom(roomId) {
-        if (this.socket && this.socket.connected) {
-            this.currentRoom = roomId;
-            this.socket.emit("joinRoom", roomId);
+    createRoom() { this.socket.emit("createRoom"); }
+    joinRoom(roomId) { 
+        this.socket.emit("joinRoom", roomId.toUpperCase()); 
+    }
+    startGame(roomId) { this.socket.emit("startGameRequest", roomId); }
+
+    cleanupLobbyEvents() {
+        if (this.socket) {
+            this.socket.off("roomCreated");
+            this.socket.off("roomJoined");
+            this.socket.off("playerJoined");
+            this.socket.off("gameStarted");
+            this.socket.off("error");
         }
     }
 
-    // Nouvelle méthode pour écouter le reset des slimes
+    setupLobbyEvents(lobbyScene) {
+        this.cleanupLobbyEvents();
+        this.socket.on("roomCreated", (data) => {
+            this.currentRoom = data.roomId;
+            this.roomPlayers = data.players;
+            if (lobbyScene && lobbyScene.sys.isActive()) lobbyScene.updateUI();
+        });
+        this.socket.on("roomJoined", (data) => {
+            this.currentRoom = data.roomId;
+            this.roomPlayers = data.players;
+            lobbyScene.updateUI();
+        });
+        this.socket.on("playerJoined", (players) => {
+            this.roomPlayers = players;
+            lobbyScene.updateUI();
+        });
+        this.socket.on("gameStarted", () => {
+            this.cleanupLobbyEvents();
+            lobbyScene.launchGame();
+        });
+        this.socket.on("error", (msg) => alert(msg));
+    }
+
     setupResetListener(gameInstance) {
         this.socket.on("allSlimesReset", (newSlimes) => {
             const scene = gameInstance.scene.getScene('GameScene');
@@ -33,12 +65,18 @@ class NetworkManager {
     init(gameInstance) {
         if (this.socket) {
             this.socket.removeAllListeners();
-            this.socket.disconnect();
+            this.currentRoom = null;
+            this.roomPlayers = [],
+            this.pendingPlayers = null;
+            
+            if (this.socket) {
+                this.socket.removeAllListeners();
+                this.socket.disconnect();
+                this.socket = null;
+            }
         }
         
-        this.socket = io(this.url, {
-            autoConnect: true
-        });
+        this.socket = io(this.url, { autoConnect: true });
 
         const getActiveGameScene = () => {
            return gameInstance.scene.getScene('GameScene');
@@ -72,7 +110,10 @@ class NetworkManager {
 
         this.socket.on("userDisconnected", (playerId) => {
             const scene = getActiveGameScene();
-            if (scene && scene.sys.isActive()) scene.remotePlayer.remove(playerId);
+            if (!scene || !scene.sys.isActive() || !scene.remotePlayer) return;
+            scene.time.delayedCall(50, () => {
+                if (scene.remotePlayer) scene.remotePlayer.remove(playerId);
+            });
         });
 
         this.socket.on("slimeUpdate", (serverSlimes) => {
@@ -115,7 +156,7 @@ class NetworkManager {
 
     requestCurrentPlayers() {
         if (this.socket && this.socket.connected) {
-            this.socket.emit("requestPlayers"); 
+            this.socket.emit("requestPlayers", { roomId: this.currentRoom }); 
         }
     }
 
@@ -123,16 +164,6 @@ class NetworkManager {
         if (this.socket && this.socket.connected) {
             this.socket.emit("hitSlime", { id: slimeId, damage: damage, roomId: this.currentRoom || "default" });
         }
-    }
-
-    disconnect() {
-        if (this.socket) {
-            this.socket.removeAllListeners();
-            this.socket.disconnect();
-            this.socket = null;
-        }
-        this.currentRoom = null;
-        this.pendingPlayers = null;
     }
 }
 

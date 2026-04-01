@@ -1,6 +1,6 @@
 # Core Hunter – Jeu d'Action Top-Down
 
-Slime Havoc est un jeu d'action interactif développé avec Phaser 3 et Matter.js. Le joueur incarne un héros affrontant des vagues de slimes intelligents dans un environnement dynamique. Le projet met l'accent sur la fluidité des mouvements (dash, sprint), la précision des collisions physiques et une immersion sonore spatialisée.
+Core Hunter est un jeu d'action interactif développé avec Phaser 3 et Matter.js. Le joueur incarne un héros affrontant des vagues de slimes intelligents dans un environnement dynamique. Le projet met l'accent sur la fluidité des mouvements (dash, sprint), la précision des collisions physiques et une immersion sonore spatialisée.
 
 ## Objectifs du projet
 
@@ -64,12 +64,21 @@ Dans le répertoire du projet, vous pouvez exécuter :
 ## Structure du Projet
 
 ```
-src/
+backend/
+├── controllers/
+├── models/
+├── routes/
+├── services/
+├── utiles/
+└── server.js
+
+frontend/
 ├── assets/             # Spritesheets, sons et musiques
-├── src/                # Code source du jeu
-│   ├── scenes/         # Classes Phaser (Menu, Game, Settings, Death)
-│   ├── components/     # Classes logiques (Player.js, Slime.js)
-│   └── game.js         # Configuration du jeu et lancement
+├── scenes/             # Classes Phaser (Menu, Game, Settings, Death)
+├── components/         # Classes logiques (Player.js, Slime.js)
+├── managers/           
+├── service/         
 ├── index.html          # Point d'entrée de l'application
+├── game.js             # Configuration du jeu et lancement
 └── package.json        # Dépendances et scripts
 ```

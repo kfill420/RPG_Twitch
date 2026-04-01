@@ -24,29 +24,49 @@ export default class RemotePlayerManager {
     }
 
     update(playerInfo) {
+        if (!playerInfo || !playerInfo.playerId) return;
         const remote = this.otherPlayers.get(playerInfo.playerId);
-        if (remote) {
-            remote.setPosition(playerInfo.x, playerInfo.y);
-            if (playerInfo.isDead) {
-                remote.setAngle(90);
-                remote.setTint(0x333333);
-                remote.anims.stop();
-            } else {
-                remote.setAngle(0);
-                remote.setTint();
-                if (playerInfo.anim) {
-                    remote.play(playerInfo.anim, true);
-                }
+        if (!remote || !remote.active || !remote.texture) return;
+        remote.setPosition(playerInfo.x, playerInfo.y);
+        if (playerInfo.isDead) {
+            remote.setAngle(90);
+            remote.setTint(0x333333);
+            remote.anims.stop();
+        } else {
+            remote.setAngle(0);
+            remote.setTint();
+            if (playerInfo.anim) {
+                remote.play(playerInfo.anim, true);
             }
-            remote.setFlipX(playerInfo.flipX);
         }
+        remote.setFlipX(playerInfo.flipX);
+    
     }
 
     remove(playerId) {
         const remote = this.otherPlayers.get(playerId);
-        if (remote) {
-            remote.destroy();
-            this.otherPlayers.delete(playerId);
+        if (!remote) return;
+        
+        this.otherPlayers.delete(playerId);
+        
+        // Retirer du groupe en PREMIER, avant tout le reste
+        if (this.scene.sortingGroup) {
+            this.scene.sortingGroup.remove(remote, false);
         }
+    
+        // Rendre invisible et inactif immédiatement
+        remote.setVisible(false);
+        remote.setActive(false);
+    
+        // Stopper les animations
+        if (remote.anims) remote.anims.stop();
+    
+        // Retirer le body physique
+        if (remote.body) {
+            this.scene.matter.world.remove(remote.body);
+            remote.body = null;
+        }
+    
+        if (remote && remote.scene) remote.destroy();
     }
 }

@@ -290,7 +290,13 @@ export default class Slime {
          });
 
         this.sprite.once('animationcomplete', () => {
-            this.sprite.destroy();
+            if (this.scene.sortingGroup) {
+                this.scene.sortingGroup.remove(this.sprite, false);
+            }
+            if (this.sprite && this.sprite.scene) {
+                this.sprite.destroy();
+            }
+            this.sprite = null;
         });
     }
 

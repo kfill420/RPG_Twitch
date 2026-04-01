@@ -81,7 +81,7 @@ export default class MenuScene extends Phaser.Scene {
 
         this.btnMulti = new MenuButton(this, width / 2, height * 0.62, 'MULTIPLAYER', false, () => {
             networkManager.init(this.game);
-            this.scene.start('PreloadScene', { mode: 'multi' });
+            this.scene.start('LobbyScene');
         });
 
         this.btnSettings = new MenuButton(this, width / 2, height * 0.74, 'RÉGLAGES', false, () => {
