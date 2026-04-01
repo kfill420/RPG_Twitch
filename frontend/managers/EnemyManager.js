@@ -21,35 +21,51 @@ export default class EnemyManager {
     }
 
     sync(serverSlimes) {
-        const serverIds = Object.keys(serverSlimes);
+    const serverIds = Object.keys(serverSlimes);
 
-        // Nettoyage
-        this.enemies = this.enemies.filter(slime => {
-            if (!serverIds.includes(slime.id)) {
-                slime.sprite.destroy(); // On retire du rendu
-                return false;
+    // Nettoyage : tuer proprement les slimes absents du serveur
+    this.enemies = this.enemies.filter(slime => {
+        if (!serverIds.includes(slime.id)) {
+            if (!slime.isDead) {
+                // Retirer du sortingGroup immédiatement
+                if (this.scene.sortingGroup) {
+                    this.scene.sortingGroup.remove(slime.sprite, false);
+                }
+                // Masquer immédiatement pour éviter le drawImage null
+                if (slime.sprite && slime.sprite.active) {
+                    slime.sprite.setVisible(false);
+                    slime.sprite.setActive(false);
+                }
+                // Détruire au prochain tick
+                this.scene.time.delayedCall(50, () => {
+                    if (slime.sprite && slime.sprite.scene) {
+                        slime.sprite.destroy();
+                    }
+                });
             }
-            return true;
-        });
+            return false;
+        }
+        return true;
+    });
 
-        Object.values(serverSlimes).forEach(data => {
-            if (data.dead) {
-                const slime = this.enemies.find(e => e.id === data.id);
-                if (slime && !slime.isDead) slime.die();
-                return;
-            }
+    Object.values(serverSlimes).forEach(data => {
+        if (data.dead) {
+            const slime = this.enemies.find(e => e.id === data.id);
+            if (slime && !slime.isDead) slime.die();
+            return;
+        }
 
-            let slime = this.enemies.find(e => e.id === data.id);
-            
-            if (!slime) {
-                slime = new Slime(this.scene, data.x, data.y, data.type, data.id);
-                this.enemies.push(slime);
-                if (this.scene.sortingGroup) this.scene.sortingGroup.add(slime.sprite);
-            }
+        let slime = this.enemies.find(e => e.id === data.id);
         
-            slime.syncFromServer(data);
-        });
-    }
+        if (!slime) {
+            slime = new Slime(this.scene, data.x, data.y, data.type, data.id);
+            this.enemies.push(slime);
+            if (this.scene.sortingGroup) this.scene.sortingGroup.add(slime.sprite);
+        }
+    
+        slime.syncFromServer(data);
+    });
+}
 
     handleStatChange(data) {
         const slime = this.enemies.find(e => e.id === data.id);

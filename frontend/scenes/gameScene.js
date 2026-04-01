@@ -17,6 +17,7 @@ export default class GameScene extends Phaser.Scene {
 
     init(data) {
         this.gameMode = data.mode || 'solo';
+        this.roomId = data.roomId || 'default';
     }
 
     create() {
@@ -38,14 +39,12 @@ export default class GameScene extends Phaser.Scene {
         this._setupCollisionEvents();
 
         if (this.gameMode === 'multi') {
-            networkManager.joinRoom("default");
-
             if (networkManager.pendingPlayers) {
                 this.spawnRemotePlayers(networkManager.pendingPlayers);
                 networkManager.pendingPlayers = null;
             }
             networkManager.requestCurrentPlayers();
-            networkManager.socket.emit("requestSlimes"); 
+            networkManager.socket.emit("requestSlimes", { roomId: this.roomId }); 
         }
     }
 

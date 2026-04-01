@@ -64,12 +64,21 @@ Dans le répertoire du projet, vous pouvez exécuter :
 ## Structure du Projet
 
 ```
-src/
+backend/
+├── controllers/
+├── models/
+├── routes/
+├── services/
+├── utiles/
+└── server.js
+
+frontend/
 ├── assets/             # Spritesheets, sons et musiques
-├── src/                # Code source du jeu
-│   ├── scenes/         # Classes Phaser (Menu, Game, Settings, Death)
-│   ├── components/     # Classes logiques (Player.js, Slime.js)
-│   └── game.js         # Configuration du jeu et lancement
+├── scenes/             # Classes Phaser (Menu, Game, Settings, Death)
+├── components/         # Classes logiques (Player.js, Slime.js)
+├── managers/           
+├── service/         
 ├── index.html          # Point d'entrée de l'application
+├── game.js             # Configuration du jeu et lancement
 └── package.json        # Dépendances et scripts
 ```
